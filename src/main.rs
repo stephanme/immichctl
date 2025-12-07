@@ -1,14 +1,18 @@
 use clap::{Parser, Subcommand};
-use reqwest;
-use serde::{Deserialize, Serialize};
+use reqwest::{self};
 
 pub mod config;
 use config::Config;
+
+include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
 /// A command line interface for Immich.
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
+    /// Enable verbose output for detailed error messages
+    #[arg(short, long, global = true)]
+    verbose: bool,
     #[command(subcommand)]
     command: Commands,
 }
@@ -29,58 +33,35 @@ enum Commands {
     Logout,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct ServerVersionResponse {
-    major: i32,
-    minor: i32,
-    patch: i32,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct ValidateAccessTokenResponse {
-    #[serde(rename = "authStatus")]
-    auth_status: bool,
-}
-
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    
-    let config_file = Config::get_default_config_file().expect("Could not determine default config file path");
+
+    let config_file =
+        Config::get_default_config_file().expect("Could not determine default config file path");
     let mut config = Config::load(&config_file);
+
+    // immich client gets rebuild when config changes, i.e. for login command
+    let mut immich = build_client(&config);
 
     match &cli.command {
         Commands::Version => {
             let version = env!("CARGO_PKG_VERSION");
             println!("immichctl version: {}", version);
             if config.logged_in() {
-                let client = reqwest::Client::new();
-                let server_version_url = format!("{}/api/server/version", config.server);
-                match client.get(&server_version_url).send().await {
+                match immich.get_server_version().await {
                     Ok(response) => {
-                        if response.status().is_success() {
-                            match response.json::<ServerVersionResponse>().await {
-                                Ok(server_version) => {
-                                    println!(
-                                        "Immich server version: {}.{}.{}",
-                                        server_version.major,
-                                        server_version.minor,
-                                        server_version.patch
-                                    );
-                                }
-                                Err(_) => {
-                                    println!("Could not parse server version response.");
-                                }
-                            }
-                        } else {
-                            println!(
-                                "Could not get server version. Status: {}",
-                                response.status()
-                            );
-                        }
+                        println!(
+                            "Immich server version: {}.{}.{}",
+                            response.major, response.minor, response.patch
+                        );
                     }
-                    Err(_) => {
-                        println!("Could not connect to the server to get the version.");
+                    Err(e) => {
+                        print_error(
+                            &e,
+                            cli.verbose,
+                            "Could not connect to the server to get the version",
+                        );
                     }
                 }
             } else {
@@ -89,42 +70,20 @@ async fn main() {
         }
         Commands::Login { server, apikey } => match (server, apikey) {
             (Some(server), Some(apikey)) => {
-                let client = reqwest::Client::new();
-                let validate_url = format!("{}/api/auth/validateToken", server);
-                match client
-                    .post(&validate_url)
-                    .header("x-api-key", apikey.clone())
-                    .send()
-                    .await
-                {
-                    Ok(response) => {
-                        if response.status().is_success() {
-                            match response.json::<ValidateAccessTokenResponse>().await {
-                                Ok(validate_response) => {
-                                    if validate_response.auth_status {
-                                        println!("Successfully logged in to {:?}", server);
-
-                                        config.server = server.clone();
-                                        config.apikey = apikey.clone();
-                                        // Save config
-                                        config.save().expect("Could not save configuration");
-                                    } else {
-                                        println!("Login failed. API key is not valid.");
-                                    }
-                                }
-                                Err(_) => {
-                                    println!("Could not parse validation response. Login failed.");
-                                }
-                            }
-                        } else {
-                            println!(
-                                "Login failed. Could not connect to server. Status: {}",
-                                response.status()
-                            );
-                        }
+                config.server = server.clone();
+                config.apikey = apikey.clone();
+                immich = build_client(&config);
+                match immich.validate_access_token().await {
+                    Ok(_response) => {
+                        println!("Login successful to server: {}", server);
+                        config.save().expect("Could not save configuration");
                     }
-                    Err(_) => {
-                        println!("Login failed. Could not connect to the server.");
+                    Err(e) => {
+                        print_error(
+                            &e,
+                            cli.verbose,
+                            "Login failed. Could not connect to the server",
+                        );
                     }
                 }
             }
@@ -132,9 +91,7 @@ async fn main() {
                 if config.logged_in() {
                     println!("Currently logged in to: {}", config.server);
                 } else {
-                    println!(
-                        "Not logged in. Use 'immichctl login <URL> --apikey <KEY>' to login."
-                    );
+                    println!("Not logged in. Use 'immichctl login <URL> --apikey <KEY>' to login.");
                 }
             }
             _ => {
@@ -147,6 +104,32 @@ async fn main() {
             config.logout();
             config.save().expect("Could not save configuration");
         }
+    }
+}
+
+fn build_client(config: &Config) -> Client {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        "x-api-key",
+        reqwest::header::HeaderValue::from_str(&config.apikey).unwrap(),
+    );
+    let client_with_custom_defaults = reqwest::ClientBuilder::new()
+        .default_headers(headers)
+        .build()
+        .unwrap();
+    let immich_api_url = config.server.clone() + "/api";
+    Client::new_with_client(&immich_api_url, client_with_custom_defaults)
+}
+
+fn print_error(e: &Error, verbose: bool, context: &str) {
+    if verbose {
+        eprintln!("{}: {:?}", context, e);
+    } else {
+        let status = match e.status() {
+            Some(s) => s.canonical_reason().unwrap_or("Unknown status code"),
+            None => "Unknown error",
+        };
+        eprintln!("{}: {}", context, status);
     }
 }
 

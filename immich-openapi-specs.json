@@ -21209,7 +21209,6 @@
             "$ref": "#/components/schemas/OcrConfig"
           },
           "urls": {
-            "format": "uri",
             "items": {
               "format": "uri",
               "type": "string"
