@@ -1,4 +1,17 @@
 use std::collections::HashMap;
+use openapiv3::ReferenceOr;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Method {
+    Get,
+    Post,
+    // Put,
+    // Delete,
+    // Options,
+    // Head,
+    // Patch,
+    // Trace,
+}
 
 fn main() {
     // Source OpenAPI spec
@@ -10,18 +23,6 @@ fn main() {
     let mut spec: openapiv3::OpenAPI =
         serde_json::from_reader(file).expect("failed to parse OpenAPI spec");
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    enum Method {
-        Get,
-        Post,
-        // Put,
-        // Delete,
-        // Options,
-        // Head,
-        // Patch,
-        // Trace,
-    }
-
     // Immich endpoints required by immichctl
     let allowed: HashMap<&str, Vec<Method>> = HashMap::from([
         ("/server/version", vec![Method::Get]),
@@ -32,11 +33,22 @@ fn main() {
 
     // Retain only paths that have at least one allowed operation.
     spec.paths.paths.retain(|path, item| {
-        let Some(_pi) = item.as_item() else {
+        let ReferenceOr::Item(pi) = item else {
             return false;
         };
-        allowed.contains_key(path.as_str())
+        let Some(methods) = allowed.get(path.as_str()) else {
+            return false;
+        };
+        // keep only allowed methods for each path
+        if pi.get.is_some() && !methods.contains(&Method::Get) {
+            pi.get = None;
+        }
+        if pi.post.is_some() && !methods.contains(&Method::Post) {
+            pi.post = None;
+        }
+        true
     });
+    // TODO: could drop all unneeded types from openapi spec to speed up build
 
     // Generate Rust client code using progenitor
     let settings = progenitor::GenerationSettings::default();
