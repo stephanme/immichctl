@@ -13,11 +13,11 @@ pub struct Config {
 
 impl Config {
     pub fn load(config_file: &Path) -> Config {
-        match Self::load_config(&config_file) {
+        match Self::load_config(config_file) {
             Some(mut cfg) => {
                 cfg.config_file = config_file.to_path_buf();
                 cfg
-            },
+            }
             None => Config {
                 config_file: config_file.to_path_buf(),
                 server: String::new(),
@@ -28,12 +28,8 @@ impl Config {
 
     pub fn save(&self) -> std::io::Result<()> {
         fs::create_dir_all(self.config_file.parent().unwrap())?;
-        let contents = serde_json::to_string_pretty(&self).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Serialization error: {}", e),
-            )
-        })?;
+        let contents = serde_json::to_string_pretty(&self)
+            .map_err(|e| std::io::Error::other(format!("Serialization error: {}", e)))?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::OpenOptionsExt;
@@ -73,7 +69,7 @@ impl Config {
         if !config_file.exists() {
             return None;
         }
-        let mut file = fs::File::open(&config_file).ok()?;
+        let mut file = fs::File::open(config_file).ok()?;
         let mut contents = String::new();
         file.read_to_string(&mut contents).ok()?;
         serde_json::from_str(&contents).ok()

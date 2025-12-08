@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 fn main() {
     // Source OpenAPI spec
     let src = "./immich-openapi-specs.json";
@@ -8,53 +10,37 @@ fn main() {
     let mut spec: openapiv3::OpenAPI =
         serde_json::from_reader(file).expect("failed to parse OpenAPI spec");
 
-    // Explicit allowlist of path + method pairs.
-    // TODO: Adjust this list to the exact endpoints you need.
-    use std::collections::HashSet;
-
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     enum Method {
         Get,
         Post,
-        Put,
-        Delete,
-        Options,
-        Head,
-        Patch,
-        Trace,
+        // Put,
+        // Delete,
+        // Options,
+        // Head,
+        // Patch,
+        // Trace,
     }
 
-    let allowed: HashSet<(String, Method)> = [
-        // Example entries (replace with Immich endpoints you require):
-        ("/server/version".to_string(), Method::Get),
-        ("/auth/validateToken".to_string(), Method::Post),
-    ]
-    .into_iter()
-    .collect();
+    // Immich endpoints required by immichctl
+    let allowed: HashMap<&str, Vec<Method>> = HashMap::from([
+        ("/server/version", vec![Method::Get]),
+        ("/auth/validateToken", vec![Method::Post]),
+        ("/search/metadata", vec![Method::Post]),
+        ("/tags", vec![Method::Get]),
+    ]);
 
     // Retain only paths that have at least one allowed operation.
     spec.paths.paths.retain(|path, item| {
-        let Some(pi) = item.as_item() else {
+        let Some(_pi) = item.as_item() else {
             return false;
         };
-        let pairs = [
-            (pi.get.as_ref(), Method::Get),
-            (pi.post.as_ref(), Method::Post),
-            (pi.put.as_ref(), Method::Put),
-            (pi.delete.as_ref(), Method::Delete),
-            (pi.options.as_ref(), Method::Options),
-            (pi.head.as_ref(), Method::Head),
-            (pi.patch.as_ref(), Method::Patch),
-            (pi.trace.as_ref(), Method::Trace),
-        ];
-
-        pairs.iter().any(|(op, m)| {
-            op.is_some() && allowed.contains(&(path.clone(), *m))
-        })
+        allowed.contains_key(path.as_str())
     });
 
     // Generate Rust client code using progenitor
-    let mut generator = progenitor::Generator::default();
+    let settings = progenitor::GenerationSettings::default();
+    let mut generator = progenitor::Generator::new(&settings);
     let tokens = generator
         .generate_tokens(&spec)
         .expect("progenitor token generation failed");

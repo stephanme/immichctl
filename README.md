@@ -29,3 +29,26 @@ immichctl is a command line tool to manage [Immich](https://docs.immich.app) ass
 `immichctl logout`
 
 - remove login information
+
+## Manage Asset Selections
+
+Most immichctl commands like adding/removing tags, adjusting timestamps etc. work on asset selections.
+The current asset selection is stored in `$HOME/.immchctl/selection.json`. 
+
+### List selection
+
+`immichctl list selection`
+
+### Clear selection
+
+`immichctl clear selection`
+
+### Add assets to selection
+
+Single asset by id:
+`immichctl add selection --id <asset id>`
+`immichctl add selection --tag <tag>`
+
+### Count selection
+
+`immichctl count selection`
