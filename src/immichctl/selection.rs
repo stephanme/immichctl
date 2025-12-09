@@ -3,9 +3,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use anyhow::{Result,Context};
 
-use super::types::AssetResponseDto;
+use crate::immichctl::types::AssetResponseDto;
 
+// could keep asset data on disk only to avoid large memory usage
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Selection {
     #[serde(skip)]
@@ -39,12 +41,11 @@ impl Selection {
         serde_json::from_str(&contents).ok()
     }
 
-    pub fn save(&self) -> std::io::Result<()> {
+    pub fn save(&self) -> Result<()> {
         fs::create_dir_all(self.file.parent().unwrap())?;
-        let contents = serde_json::to_string_pretty(&self)
-            .map_err(|e| std::io::Error::other(format!("Serialization error: {}", e)))?;
-        let mut file = fs::File::create(&self.file)?;
-        file.write_all(contents.as_bytes())?;
+        let contents = serde_json::to_string_pretty(&self).context("Could not save selection, serialization error")?;
+        let mut file = fs::File::create(&self.file).context("Could not save selection.")?;
+        file.write_all(contents.as_bytes()).context("Could not save selection.")?;
         Ok(())
     }
 
@@ -86,7 +87,7 @@ impl Selection {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{AssetTypeEnum, AssetVisibility};
+    use crate::immichctl::types::{AssetTypeEnum, AssetVisibility};
     use chrono::{DateTime, Utc};
 
     use super::*;
@@ -152,6 +153,7 @@ mod tests {
         sel.remove_asset(&asset_id);
         assert_eq!(sel.len(), 0);
         assert!(!sel.contains(&asset_id));
+        assert!(sel.is_empty())
     }
 
     fn tmp_path(name: &str) -> PathBuf {
