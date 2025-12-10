@@ -25,14 +25,13 @@ impl ImmichCtl {
     }
 
     pub async fn selection_add(&mut self, id: &Option<String>, tag: &Option<String>) -> Result<()> {
-        self.assert_logged_in()?;
         let mut body = MetadataSearchDto::default();
         if let Some(id) = id {
             let uuid = uuid::Uuid::parse_str(id).context("Invalid asset id, expected uuid")?;
             body.id = Some(uuid);
         }
         if let Some(tag_name) = tag {
-            let tags_resp =  self.immich.get_all_tags().await.context("Could not retrieve tags")?;
+            let tags_resp =  self.immich()?.get_all_tags().await.context("Could not retrieve tags")?;
             let maybe_tag = tags_resp.iter().find(|t| t.name == *tag_name);
             match maybe_tag {
                 Some(t) => {
@@ -50,7 +49,7 @@ impl ImmichCtl {
             bail!("Please provide at least one search flag.");
         }
         // TODO: handle pagination
-        let mut resp = self.immich.search_assets(&body).await.context("Search failed")?;
+        let mut resp = self.immich()?.search_assets(&body).await.context("Search failed")?;
         let mut sel = Selection::load(&self.selection_file);
         let old_len = sel.len();
         for asset in resp.assets.items.drain(..) {

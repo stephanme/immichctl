@@ -49,13 +49,6 @@ impl Selection {
         Ok(())
     }
 
-    pub fn get_default_selection_file() -> Option<PathBuf> {
-        dirs::home_dir().map(|mut path| {
-            path.push(".immichctl");
-            path.push("selection.json");
-            path
-        })
-    }
     pub fn clear(&mut self) {
         self.assets.clear();
     }

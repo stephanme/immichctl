@@ -1,10 +1,10 @@
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use anyhow::{Result,Context};
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct Config {
     #[serde(skip)]
     config_file: PathBuf,
@@ -29,21 +29,27 @@ impl Config {
 
     pub fn save(&self) -> Result<()> {
         fs::create_dir_all(self.config_file.parent().unwrap())?;
-        let contents = serde_json::to_string_pretty(&self).context("Could not save configuration, serialization error")?;
+        let contents = serde_json::to_string_pretty(&self)
+            .context("Could not save configuration, serialization error")?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::OpenOptionsExt;
             let mut options = fs::OpenOptions::new();
             options.write(true).create(true).truncate(true);
             options.mode(0o600); // User read/write only
-            let mut file = options.open(&self.config_file).context("Could not save configuration.")?;
-            file.write_all(contents.as_bytes()).context("Could not save configuration.")?;
+            let mut file = options
+                .open(&self.config_file)
+                .context("Could not save configuration.")?;
+            file.write_all(contents.as_bytes())
+                .context("Could not save configuration.")?;
         }
         #[cfg(not(unix))]
         {
             // On non-Unix platforms, default permissions are used.
-            let mut file = fs::File::create(&self.config_file).context("Could not save configuration.")?;
-            file.write_all(contents.as_bytes()).context("Could not save configuration.")?;
+            let mut file =
+                fs::File::create(&self.config_file).context("Could not save configuration.")?;
+            file.write_all(contents.as_bytes())
+                .context("Could not save configuration.")?;
         }
         Ok(())
     }
@@ -55,14 +61,6 @@ impl Config {
     pub fn logout(&mut self) {
         self.server.clear();
         self.apikey.clear();
-    }
-
-    pub fn get_default_config_file() -> Option<PathBuf> {
-        dirs::home_dir().map(|mut path| {
-            path.push(".immichctl");
-            path.push("config.json");
-            path
-        })
     }
 
     fn load_config(config_file: &Path) -> Option<Config> {
@@ -132,13 +130,5 @@ mod tests {
         config.logout();
         assert!(config.server.is_empty());
         assert!(config.apikey.is_empty());
-    }
-
-    #[test]
-    fn test_get_default_config_file() {
-        let path = Config::get_default_config_file();
-        assert!(path.is_some());
-        let path = path.unwrap();
-        assert!(path.ends_with(".immichctl/config.json"));
     }
 }
