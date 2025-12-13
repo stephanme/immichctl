@@ -29,50 +29,17 @@ enum Commands {
     },
     /// Logout from the current Immich instance
     Logout,
-    /// Clear data
-    Clear {
-        #[command(subcommand)]
-        command: ClearCommands,
-    },
-    /// Count data
-    Count {
-        #[command(subcommand)]
-        command: CountCommands,
-    },
-    /// List data
-    List {
-        #[command(subcommand)]
-        command: ListCommands,
-    },
-    /// Add data
-    Add {
-        #[command(subcommand)]
-        command: AddCommands,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-enum ClearCommands {
-    /// Clear the local selection store
-    Selection,
-}
-
-#[derive(Subcommand, Debug)]
-enum CountCommands {
-    /// Count items in the local selection store
-    Selection,
-}
-
-#[derive(Subcommand, Debug)]
-enum ListCommands {
-    /// List asset ids in the local selection store
-    Selection,
-}
-
-#[derive(Subcommand, Debug)]
-enum AddCommands {
-    /// Add an asset to the local selection by searching metadata
+    /// Manage the selection
     Selection {
+        #[command(subcommand)]
+        command: SelectionCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum SelectionCommands {
+    /// Add an asset to the local selection by searching metadata
+    Add {
         /// Asset id to add (UUID)
         #[arg(long, value_name = "asset id")]
         id: Option<String>,
@@ -83,6 +50,12 @@ enum AddCommands {
         #[arg(long, value_name = "album name")]
         album: Option<String>,
     },
+    /// Clear the local selection store
+    Clear,
+    /// Count items in the local selection store
+    Count,
+    /// List asset ids in the local selection store
+    List,
 }
 
 #[tokio::main]
@@ -106,39 +79,27 @@ async fn _main(cli: &Cli) -> Result<()> {
             immichctl.version().await?;
         }
         Commands::Login { server, apikey } => match (server, apikey) {
-            (Some(server), Some(apikey)) => {
-                immichctl.login(server, apikey).await?;
-            }
-            (None, None) => {
-                immichctl.show_login()?;
-            }
-            _ => {
-                println!(
-                    "Please provide both server URL and --apikey to login, or no arguments to see the current server."
-                );
-            }
+            (Some(server), Some(apikey)) => immichctl.login(server, apikey).await?,
+            (None, None) => immichctl.show_login()?,
+            _ => println!(
+                "Please provide both server URL and --apikey to login, or no arguments to see the current server."
+            ),
         },
         Commands::Logout => {
             immichctl.logout()?;
         }
-        Commands::Clear { command } => match command {
-            ClearCommands::Selection => {
+        Commands::Selection { command } => match command {
+            SelectionCommands::Add { id, tag, album } => {
+                immichctl.selection_add(id, tag, album).await?;
+            }
+            SelectionCommands::Clear => {
                 immichctl.selection_clear()?;
             }
-        },
-        Commands::Count { command } => match command {
-            CountCommands::Selection => {
+            SelectionCommands::Count => {
                 immichctl.selection_count();
             }
-        },
-        Commands::List { command } => match command {
-            ListCommands::Selection => {
+            SelectionCommands::List => {
                 immichctl.selection_list();
-            }
-        },
-        Commands::Add { command } => match command {
-            AddCommands::Selection { id, tag, album } => {
-                immichctl.selection_add(id, tag, album).await?;
             }
         },
     }

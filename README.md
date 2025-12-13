@@ -37,18 +37,19 @@ The current asset selection is stored in `$HOME/.immchctl/selection.json`.
 
 ### List selection
 
-`immichctl list selection`
+`immichctl selection list`
 
 ### Clear selection
 
-`immichctl clear selection`
+`immichctl selection clear`
 
 ### Add assets to selection
 
 Single asset by id:
-`immichctl add selection --id <asset id>`
-`immichctl add selection --tag <tag>`
+`immichctl selection add --id <asset id>`
+`immichctl selection add --tag <tag>`
+`immichctl selection add --album <album>`
 
 ### Count selection
 
-`immichctl count selection`
+`immichctl selection count`
