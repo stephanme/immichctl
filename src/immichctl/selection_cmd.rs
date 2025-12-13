@@ -1,6 +1,6 @@
 use super::ImmichCtl;
 use super::selection::Selection;
-use super::types::{MetadataSearchDto, TagResponseDto};
+use super::types::{AlbumResponseDto, MetadataSearchDto, TagResponseDto};
 use anyhow::{Context, Result, bail};
 use uuid::Uuid;
 
@@ -25,7 +25,12 @@ impl ImmichCtl {
         }
     }
 
-    pub async fn selection_add(&mut self, id: &Option<String>, tag: &Option<String>) -> Result<()> {
+    pub async fn selection_add(
+        &mut self,
+        id: &Option<String>,
+        tag: &Option<String>,
+        album: &Option<String>,
+    ) -> Result<()> {
         let mut body = MetadataSearchDto::default();
         if let Some(id) = id {
             let uuid = uuid::Uuid::parse_str(id).context("Invalid asset id, expected uuid")?;
@@ -42,6 +47,20 @@ impl ImmichCtl {
                 Some(uuid) => body.tag_ids = Some(vec![uuid]),
                 None => {
                     bail!("Tag not found: '{}'", tag_name);
+                }
+            }
+        }
+        if let Some(album_name) = album {
+            let albums_resp = self
+                .immich()?
+                .get_all_albums(None, None)
+                .await
+                .context("Could not retrieve albums")?;
+            let album_id = Self::find_album_by_name(album_name, &albums_resp);
+            match album_id {
+                Some(uuid) => body.album_ids.push(uuid),
+                None => {
+                    bail!("Album not found: '{}'", album_name);
                 }
             }
         }
@@ -92,10 +111,19 @@ impl ImmichCtl {
             .or(tags.iter().find(|t| t.name == name));
         found_tag.and_then(|found_tag| Uuid::parse_str(&found_tag.id).ok())
     }
+
+    fn find_album_by_name(name: &str, albums: &[AlbumResponseDto]) -> Option<Uuid> {
+        albums
+            .iter()
+            .find(|a| a.album_name == name)
+            .and_then(|found_album| Uuid::parse_str(&found_album.id).ok())
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::immichctl::types::{UserAvatarColor, UserResponseDto};
+
     use super::*;
     use chrono::DateTime;
 
@@ -113,6 +141,67 @@ mod tests {
             updated_at: timestamp,
             color: None,
         }
+    }
+
+    fn create_album(id: &str, name: &str) -> AlbumResponseDto {
+        let timestamp = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        AlbumResponseDto {
+            id: id.to_string(),
+            album_name: name.to_string(),
+            owner_id: Uuid::new_v4().to_string(),
+            created_at: timestamp,
+            updated_at: timestamp,
+            asset_count: 1,
+            album_thumbnail_asset_id: None,
+            shared: false,
+            assets: vec![],
+            owner: UserResponseDto {
+                id: Uuid::new_v4().to_string(),
+                email: "test@test.com".to_string(),
+                name: "Test User".to_string(),
+                avatar_color: UserAvatarColor::Blue,
+                profile_image_path: "".to_string(),
+                profile_changed_at: timestamp,
+            },
+            start_date: None,
+            end_date: None,
+            has_shared_link: false,
+            album_users: vec![],
+            contributor_counts: vec![],
+            description: "".to_string(),
+            is_activity_enabled: false,
+            last_modified_asset_timestamp: None,
+            order: None,
+        }
+    }
+
+    #[test]
+    fn test_find_album_by_name() {
+        let albums = vec![
+            create_album("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1", "Album 1"),
+            create_album("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab2", "Album 2"),
+            create_album("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab3", "Another Album"),
+        ];
+
+        // Find an existing album
+        assert_eq!(
+            ImmichCtl::find_album_by_name("Album 2", &albums),
+            Uuid::parse_str("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab2").ok()
+        );
+
+        // Album not found
+        assert_eq!(
+            ImmichCtl::find_album_by_name("Nonexistent Album", &albums),
+            None
+        );
+
+        // Find another existing album
+        assert_eq!(
+            ImmichCtl::find_album_by_name("Album 1", &albums),
+            Uuid::parse_str("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1").ok()
+        );
     }
 
     #[test]

@@ -29,6 +29,7 @@ fn main() {
         ("/auth/validateToken", vec![Method::Post]),
         ("/search/metadata", vec![Method::Post]),
         ("/tags", vec![Method::Get]),
+        ("/albums", vec![Method::Get]),
     ]);
 
     // Retain only paths that have at least one allowed operation.

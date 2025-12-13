@@ -79,6 +79,9 @@ enum AddCommands {
         /// Tag name to search and add by tag id
         #[arg(long, value_name = "tag name")]
         tag: Option<String>,
+        /// Album name to search
+        #[arg(long, value_name = "album name")]
+        album: Option<String>,
     },
 }
 
@@ -134,8 +137,8 @@ async fn _main(cli: &Cli) -> Result<()> {
             }
         },
         Commands::Add { command } => match command {
-            AddCommands::Selection { id, tag } => {
-                immichctl.selection_add(id, tag).await?;
+            AddCommands::Selection { id, tag, album } => {
+                immichctl.selection_add(id, tag, album).await?;
             }
         },
     }

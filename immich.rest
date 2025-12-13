@@ -1,0 +1,26 @@
+# immich rest api calls
+# !!! select the environment before running the requests !!!
+
+### Server Version
+GET http://{{immich_host}}/api/server/version
+x-api-key: {{immich_api_key}}
+Content-Type: application/json
+
+### Tags
+GET http://{{immich_host}}/api/tags
+x-api-key: {{immich_api_key}}
+
+### Albums
+GET http://{{immich_host}}/api/albums
+x-api-key: {{immich_api_key}}
+
+### Search
+POST http://{{immich_host}}/api/search/metadata
+x-api-key: {{immich_api_key}}
+Content-Type: application/json
+
+{
+    "page": 1,
+//    "tagIds": ["125b20bb-d6d4-48cc-a2c9-9c558661f4a1"]
+    "albumIds": ["813928b7-59e8-4152-b891-70ace027352d"]
+}
