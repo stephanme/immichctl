@@ -21,6 +21,6 @@ Content-Type: application/json
 
 {
     "page": 1,
-//    "tagIds": ["125b20bb-d6d4-48cc-a2c9-9c558661f4a1"]
-    "albumIds": ["813928b7-59e8-4152-b891-70ace027352d"]
+    "tagIds": ["125b20bb-d6d4-48cc-a2c9-9c558661f4a1"]
+//    "albumIds": ["813928b7-59e8-4152-b891-70ace027352d"]
 }

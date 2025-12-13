@@ -56,6 +56,18 @@ enum SelectionCommands {
     Count,
     /// List asset ids in the local selection store
     List,
+    /// Remove an asset from the local selection by searching metadata
+    Remove {
+        /// Asset id to remove (UUID)
+        #[arg(long, value_name = "asset id")]
+        id: Option<String>,
+        /// Tag name to search and remove by tag id
+        #[arg(long, value_name = "tag name")]
+        tag: Option<String>,
+        /// Album name to search
+        #[arg(long, value_name = "album name")]
+        album: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -100,6 +112,9 @@ async fn _main(cli: &Cli) -> Result<()> {
             }
             SelectionCommands::List => {
                 immichctl.selection_list();
+            }
+            SelectionCommands::Remove { id, tag, album } => {
+                immichctl.selection_remove(id, tag, album).await?;
             }
         },
     }

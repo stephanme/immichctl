@@ -21,7 +21,7 @@ impl ImmichCtl {
     pub fn selection_list(&self) {
         let sel = Selection::load(&self.selection_file);
         for asset in sel.list_assets() {
-            println!("{}", asset.id);
+            println!("{}, {}", asset.id, asset.original_file_name);
         }
     }
 
@@ -97,6 +97,83 @@ impl ImmichCtl {
         println!(
             "Added {} asset(s) to selection.",
             new_len.saturating_sub(old_len)
+        );
+        Ok(())
+    }
+
+    pub async fn selection_remove(
+        &mut self,
+        id: &Option<String>,
+        tag: &Option<String>,
+        album: &Option<String>,
+    ) -> Result<()> {
+        let mut body = MetadataSearchDto::default();
+        if let Some(id) = id {
+            // TODO: could be implemented w/o searching server
+            let uuid = uuid::Uuid::parse_str(id).context("Invalid asset id, expected uuid")?;
+            body.id = Some(uuid);
+        }
+        if let Some(tag_name) = tag {
+            let tags_resp = self
+                .immich()?
+                .get_all_tags()
+                .await
+                .context("Could not retrieve tags")?;
+            let tag_id = Self::find_tag_by_name(tag_name, &tags_resp);
+            match tag_id {
+                Some(uuid) => body.tag_ids = Some(vec![uuid]),
+                None => {
+                    bail!("Tag not found: '{}'", tag_name);
+                }
+            }
+        }
+        if let Some(album_name) = album {
+            let albums_resp = self
+                .immich()?
+                .get_all_albums(None, None)
+                .await
+                .context("Could not retrieve albums")?;
+            let album_id = Self::find_album_by_name(album_name, &albums_resp);
+            match album_id {
+                Some(uuid) => body.album_ids.push(uuid),
+                None => {
+                    bail!("Album not found: '{}'", album_name);
+                }
+            }
+        }
+        // check that at least one search flag is provided
+        if body == MetadataSearchDto::default() {
+            bail!("Please provide at least one search flag.");
+        }
+
+        let mut sel = Selection::load(&self.selection_file);
+        let old_len = sel.len();
+        // TODO map OpenAPI number to i32 (instead of f64)
+        let mut page = 1f64;
+        while page > 0f64 {
+            body.page = Some(page);
+            let mut resp = self
+                .immich()?
+                .search_assets(&body)
+                .await
+                .context("Search failed")?;
+            for asset in resp.assets.items.iter() {
+                sel.remove_asset(&asset.id);
+            }
+            match &resp.assets.next_page {
+                Some(next_page) => {
+                    page = next_page
+                        .parse::<f64>()
+                        .context("Invalid next_page value")?;
+                }
+                None => page = 0f64,
+            }
+        }
+        sel.save()?;
+        let new_len = sel.len();
+        println!(
+            "Removed {} asset(s) from selection.",
+            old_len.saturating_sub(new_len)
         );
         Ok(())
     }
