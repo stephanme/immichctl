@@ -1,9 +1,9 @@
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use anyhow::{Result,Context};
 
 use crate::immichctl::types::AssetResponseDto;
 
@@ -43,9 +43,11 @@ impl Selection {
 
     pub fn save(&self) -> Result<()> {
         fs::create_dir_all(self.file.parent().unwrap())?;
-        let contents = serde_json::to_string_pretty(&self).context("Could not save selection, serialization error")?;
+        let contents = serde_json::to_string_pretty(&self)
+            .context("Could not save selection, serialization error")?;
         let mut file = fs::File::create(&self.file).context("Could not save selection.")?;
-        file.write_all(contents.as_bytes()).context("Could not save selection.")?;
+        file.write_all(contents.as_bytes())
+            .context("Could not save selection.")?;
         Ok(())
     }
 

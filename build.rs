@@ -58,7 +58,8 @@ fn main() {
     prune_components_recursive(&mut spec);
 
     // Generate Rust client code using progenitor
-    let settings = progenitor::GenerationSettings::default();
+    let mut settings = progenitor::GenerationSettings::default();
+    settings.with_derive("PartialEq");
     let mut generator = progenitor::Generator::new(&settings);
     let tokens = generator
         .generate_tokens(&spec)

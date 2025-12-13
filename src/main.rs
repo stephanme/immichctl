@@ -1,8 +1,8 @@
 mod immichctl;
 
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use immichctl::ImmichCtl;
-use anyhow::Result;
 
 /// A command line interface for Immich.
 #[derive(Parser, Debug)]
@@ -85,7 +85,7 @@ enum AddCommands {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    if let Err(err) = _main(&cli).await  {
+    if let Err(err) = _main(&cli).await {
         if cli.verbose {
             eprintln!("Error: {:?}", err);
         } else {
@@ -141,7 +141,6 @@ async fn _main(cli: &Cli) -> Result<()> {
     }
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {
