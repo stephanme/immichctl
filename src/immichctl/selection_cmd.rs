@@ -79,7 +79,7 @@ impl ImmichCtl {
         let mut page = 1f64;
         while page > 0f64 {
             body.page = Some(page);
-            let mut resp = self
+            let resp = self
                 .immich()?
                 .search_assets(&body)
                 .await
@@ -111,10 +111,10 @@ impl ImmichCtl {
         tag: &Option<String>,
         album: &Option<String>,
     ) -> Result<MetadataSearchDto> {
-        let mut searchDto = MetadataSearchDto::default();
+        let mut search_dto = MetadataSearchDto::default();
         if let Some(id) = id {
             let uuid = uuid::Uuid::parse_str(id).context("Invalid asset id, expected uuid")?;
-            searchDto.id = Some(uuid);
+            search_dto.id = Some(uuid);
         }
         if let Some(tag_name) = tag {
             let tags_resp = self
@@ -124,7 +124,7 @@ impl ImmichCtl {
                 .context("Could not retrieve tags")?;
             let tag_id = Self::find_tag_by_name(tag_name, &tags_resp);
             match tag_id {
-                Some(uuid) => searchDto.tag_ids = Some(vec![uuid]),
+                Some(uuid) => search_dto.tag_ids = Some(vec![uuid]),
                 None => {
                     bail!("Tag not found: '{}'", tag_name);
                 }
@@ -138,17 +138,17 @@ impl ImmichCtl {
                 .context("Could not retrieve albums")?;
             let album_id = Self::find_album_by_name(album_name, &albums_resp);
             match album_id {
-                Some(uuid) => searchDto.album_ids.push(uuid),
+                Some(uuid) => search_dto.album_ids.push(uuid),
                 None => {
                     bail!("Album not found: '{}'", album_name);
                 }
             }
         }
         // check that at least one search flag is provided
-        if searchDto == MetadataSearchDto::default() {
+        if search_dto == MetadataSearchDto::default() {
             bail!("Please provide at least one search flag.");
         }
-        Ok(searchDto)
+        Ok(search_dto)
     }
 
     /// Find a tag by its full name (including parent tags separated by '/').

@@ -1,6 +1,6 @@
 mod immichctl;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 use immichctl::ImmichCtl;
 
@@ -93,7 +93,7 @@ async fn _main(cli: &Cli) -> Result<()> {
         Commands::Login { server, apikey } => match (server, apikey) {
             (Some(server), Some(apikey)) => immichctl.login(server, apikey).await?,
             (None, None) => immichctl.show_login()?,
-            _ => println!(
+            _ => bail!(
                 "Please provide both server URL and --apikey to login, or no arguments to see the current server."
             ),
         },
