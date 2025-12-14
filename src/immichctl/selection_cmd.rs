@@ -31,43 +31,7 @@ impl ImmichCtl {
         tag: &Option<String>,
         album: &Option<String>,
     ) -> Result<()> {
-        let mut body = MetadataSearchDto::default();
-        if let Some(id) = id {
-            let uuid = uuid::Uuid::parse_str(id).context("Invalid asset id, expected uuid")?;
-            body.id = Some(uuid);
-        }
-        if let Some(tag_name) = tag {
-            let tags_resp = self
-                .immich()?
-                .get_all_tags()
-                .await
-                .context("Could not retrieve tags")?;
-            let tag_id = Self::find_tag_by_name(tag_name, &tags_resp);
-            match tag_id {
-                Some(uuid) => body.tag_ids = Some(vec![uuid]),
-                None => {
-                    bail!("Tag not found: '{}'", tag_name);
-                }
-            }
-        }
-        if let Some(album_name) = album {
-            let albums_resp = self
-                .immich()?
-                .get_all_albums(None, None)
-                .await
-                .context("Could not retrieve albums")?;
-            let album_id = Self::find_album_by_name(album_name, &albums_resp);
-            match album_id {
-                Some(uuid) => body.album_ids.push(uuid),
-                None => {
-                    bail!("Album not found: '{}'", album_name);
-                }
-            }
-        }
-        // check that at least one search flag is provided
-        if body == MetadataSearchDto::default() {
-            bail!("Please provide at least one search flag.");
-        }
+        let mut body = self.build_search_dto(id, tag, album).await?;
 
         let mut sel = Selection::load(&self.selection_file);
         let old_len = sel.len();
@@ -107,44 +71,7 @@ impl ImmichCtl {
         tag: &Option<String>,
         album: &Option<String>,
     ) -> Result<()> {
-        let mut body = MetadataSearchDto::default();
-        if let Some(id) = id {
-            // TODO: could be implemented w/o searching server
-            let uuid = uuid::Uuid::parse_str(id).context("Invalid asset id, expected uuid")?;
-            body.id = Some(uuid);
-        }
-        if let Some(tag_name) = tag {
-            let tags_resp = self
-                .immich()?
-                .get_all_tags()
-                .await
-                .context("Could not retrieve tags")?;
-            let tag_id = Self::find_tag_by_name(tag_name, &tags_resp);
-            match tag_id {
-                Some(uuid) => body.tag_ids = Some(vec![uuid]),
-                None => {
-                    bail!("Tag not found: '{}'", tag_name);
-                }
-            }
-        }
-        if let Some(album_name) = album {
-            let albums_resp = self
-                .immich()?
-                .get_all_albums(None, None)
-                .await
-                .context("Could not retrieve albums")?;
-            let album_id = Self::find_album_by_name(album_name, &albums_resp);
-            match album_id {
-                Some(uuid) => body.album_ids.push(uuid),
-                None => {
-                    bail!("Album not found: '{}'", album_name);
-                }
-            }
-        }
-        // check that at least one search flag is provided
-        if body == MetadataSearchDto::default() {
-            bail!("Please provide at least one search flag.");
-        }
+        let mut body = self.build_search_dto(id, tag, album).await?;
 
         let mut sel = Selection::load(&self.selection_file);
         let old_len = sel.len();
@@ -178,6 +105,52 @@ impl ImmichCtl {
         Ok(())
     }
 
+    async fn build_search_dto(
+        &self,
+        id: &Option<String>,
+        tag: &Option<String>,
+        album: &Option<String>,
+    ) -> Result<MetadataSearchDto> {
+        let mut searchDto = MetadataSearchDto::default();
+        if let Some(id) = id {
+            let uuid = uuid::Uuid::parse_str(id).context("Invalid asset id, expected uuid")?;
+            searchDto.id = Some(uuid);
+        }
+        if let Some(tag_name) = tag {
+            let tags_resp = self
+                .immich()?
+                .get_all_tags()
+                .await
+                .context("Could not retrieve tags")?;
+            let tag_id = Self::find_tag_by_name(tag_name, &tags_resp);
+            match tag_id {
+                Some(uuid) => searchDto.tag_ids = Some(vec![uuid]),
+                None => {
+                    bail!("Tag not found: '{}'", tag_name);
+                }
+            }
+        }
+        if let Some(album_name) = album {
+            let albums_resp = self
+                .immich()?
+                .get_all_albums(None, None)
+                .await
+                .context("Could not retrieve albums")?;
+            let album_id = Self::find_album_by_name(album_name, &albums_resp);
+            match album_id {
+                Some(uuid) => searchDto.album_ids.push(uuid),
+                None => {
+                    bail!("Album not found: '{}'", album_name);
+                }
+            }
+        }
+        // check that at least one search flag is provided
+        if searchDto == MetadataSearchDto::default() {
+            bail!("Please provide at least one search flag.");
+        }
+        Ok(searchDto)
+    }
+
     /// Find a tag by its full name (including parent tags separated by '/').
     /// If there is no match by full name, search by simple name.
     /// Returns the UUID of the tag if found.
@@ -199,6 +172,7 @@ impl ImmichCtl {
 
 #[cfg(test)]
 mod tests {
+    use crate::immichctl::tests::create_immichctl_with_server;
     use crate::immichctl::types::{UserAvatarColor, UserResponseDto};
 
     use super::*;
@@ -353,5 +327,132 @@ mod tests {
             ImmichCtl::find_tag_by_name("child1", &tags),
             Uuid::parse_str("5460dc82-2353-47d1-878c-2f15a1084003").ok()
         );
+    }
+
+    #[tokio::test]
+    async fn test_build_search_dto_no_flags() {
+        let config_dir = tempfile::tempdir().unwrap();
+        let ctl = ImmichCtl::with_config_dir(config_dir.path());
+
+        let result = ctl.build_search_dto(&None, &None, &None).await;
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "Please provide at least one search flag."
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_search_dto_with_id() {
+        let config_dir = tempfile::tempdir().unwrap();
+        let ctl = ImmichCtl::with_config_dir(config_dir.path());
+
+        let mut result = ctl
+            .build_search_dto(
+                &Some("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1".to_string()),
+                &None,
+                &None,
+            )
+            .await;
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            MetadataSearchDto {
+                id: Some(Uuid::parse_str("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1").unwrap()),
+                ..Default::default()
+            }
+        );
+
+        result = ctl
+            .build_search_dto(&Some("no-uuid".to_string()), &None, &None)
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "Invalid asset id, expected uuid"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_search_dto_with_tag() -> Result<()> {
+        let (ctl, mut server) = create_immichctl_with_server().await;
+
+        let tags = vec![create_tag(
+            "a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1",
+            "tag1",
+            None,
+        )];
+        let tags_mock = server
+            .mock("GET", "/api/tags")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&tags).unwrap())
+            .create_async()
+            .await;
+
+        let mut result = ctl
+            .build_search_dto(&None, &Some("tag1".to_string()), &None)
+            .await;
+        tags_mock.assert_async().await;
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            MetadataSearchDto {
+                tag_ids: Some(vec!(
+                    Uuid::parse_str("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1").unwrap()
+                )),
+                ..Default::default()
+            }
+        );
+
+        result = ctl
+            .build_search_dto(&None, &Some("no-tag".to_string()), &None)
+            .await;
+        tags_mock.expect(2).assert_async().await;
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap().to_string(), "Tag not found: 'no-tag'");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_build_search_dto_with_album() -> Result<()> {
+        let (ctl, mut server) = create_immichctl_with_server().await;
+
+        let albums = vec![create_album(
+            "a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1",
+            "album1",
+        )];
+        let albums_mock = server
+            .mock("GET", "/api/albums")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&albums).unwrap())
+            .create_async()
+            .await;
+
+        let mut result = ctl
+            .build_search_dto(&None, &None, &Some("album1".to_string()))
+            .await;
+        albums_mock.assert_async().await;
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            MetadataSearchDto {
+                album_ids: vec!(Uuid::parse_str("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1").unwrap()),
+                ..Default::default()
+            }
+        );
+
+        result = ctl
+            .build_search_dto(&None, &None, &Some("no-album".to_string()))
+            .await;
+        albums_mock.expect(2).assert_async().await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "Album not found: 'no-album'"
+        );
+        Ok(())
     }
 }

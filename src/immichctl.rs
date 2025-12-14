@@ -94,7 +94,20 @@ impl ImmichCtl {
 
 #[cfg(test)]
 mod tests {
+    use mockito::{Server, ServerGuard};
+
     use super::*;
+
+    pub async fn create_immichctl_with_server() -> (ImmichCtl, ServerGuard) {
+        let server = Server::new_async().await;
+        let config_dir = tempfile::tempdir().unwrap();
+        let mut config = Config::load(&config_dir.path().join("config.json"));
+        config.server = server.url();
+        config.apikey = "apikey".to_string();
+        config.save().expect("could not save config");
+        let ctl = ImmichCtl::with_config_dir(config_dir.path());
+        (ctl, server)
+    }
 
     #[test]
     fn test_get_default_config_dir() {

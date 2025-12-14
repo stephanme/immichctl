@@ -8,3 +8,4 @@
 
 # Immich API spec
 - use ./immich-openapi-specs.json
+- the API spec is translated into a client using progenitor, see build.rs

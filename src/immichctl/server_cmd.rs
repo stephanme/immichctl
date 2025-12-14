@@ -58,7 +58,7 @@ impl ImmichCtl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::immichctl::{ImmichCtl, config::Config};
+    use crate::immichctl::{ImmichCtl, config::Config, tests::create_immichctl_with_server};
     use mockito::Server;
 
     #[tokio::test]
@@ -123,13 +123,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_version_logged_in() -> Result<()> {
-        let mut server = Server::new_async().await;
-        let config_dir = tempfile::tempdir().unwrap();
-        let mut config = Config::load(&config_dir.path().join("config.json"));
-        config.server = server.url();
-        config.apikey = "apikey".to_string();
-        config.save()?;
-        let ctl = ImmichCtl::with_config_dir(config_dir.path());
+        let (ctl, mut server) = create_immichctl_with_server().await;
 
         let version_mock = server
             .mock("GET", "/api/server/version")
