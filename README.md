@@ -68,3 +68,16 @@ Tagged assets:
 
 Assets of an album:
 `immichctl selection remove --album <album>`
+
+## Tag Commands
+
+Tags can be assigned/unassigned to the selected assets. Tags are not created or deleted, i.e. the tag must already exist before it can be added.
+Tags can be specified with full hierarchical name (e.g. `parent/child`) or with just the tag name (`child`).
+
+### Add tag to selection
+
+`immichctl tag add <tag>`
+
+### Remove tag from selection
+
+`immichctl tag remove <tag>`

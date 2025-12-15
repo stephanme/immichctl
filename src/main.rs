@@ -34,6 +34,11 @@ enum Commands {
         #[command(subcommand)]
         command: SelectionCommands,
     },
+    /// Tag selected assets
+    Tag {
+        #[command(subcommand)]
+        command: TagCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -67,6 +72,20 @@ enum SelectionCommands {
         /// Album name to search
         #[arg(long, value_name = "album name")]
         album: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum TagCommands {
+    /// Add a tag to selected assets
+    Add {
+        /// Tag name to add
+        name: String,
+    },
+    /// Remove a tag from selected assets
+    Remove {
+        /// Tag name to remove
+        name: String,
     },
 }
 
@@ -115,6 +134,14 @@ async fn _main(cli: &Cli) -> Result<()> {
             }
             SelectionCommands::Remove { id, tag, album } => {
                 immichctl.selection_remove(id, tag, album).await?;
+            }
+        },
+        Commands::Tag { command } => match command {
+            TagCommands::Add { name } => {
+                immichctl.tag_add(name).await?;
+            }
+            TagCommands::Remove { name } => {
+                immichctl.tag_remove(name).await?;
             }
         },
     }

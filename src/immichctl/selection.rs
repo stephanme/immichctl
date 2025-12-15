@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use uuid::Uuid;
 
 use crate::immichctl::types::AssetResponseDto;
 
@@ -55,6 +56,7 @@ impl Selection {
         self.assets.clear();
     }
 
+    #[allow(dead_code)]
     pub fn contains(&self, asset_id: &str) -> bool {
         self.assets.contains_key(asset_id)
     }
@@ -69,6 +71,13 @@ impl Selection {
 
     pub fn list_assets(&self) -> impl Iterator<Item = &AssetResponseDto> {
         self.assets.values()
+    }
+
+    pub fn asset_uuids(&self) -> Vec<Uuid> {
+        self.assets
+            .keys()
+            .filter_map(|id| Uuid::parse_str(id).ok())
+            .collect()
     }
 
     pub fn len(&self) -> usize {
@@ -91,7 +100,7 @@ mod tests {
         // Fill all required fields of AssetResponseDto based on the openapi schema.
         AssetResponseDto {
             // required
-            id: String::from("default_asset"),
+            id: String::from("5460dc82-2353-47d1-878c-2f15a1084001"),
             checksum: String::new(),
             created_at: DateTime::<Utc>::from_timestamp_nanos(0),
             device_asset_id: String::from("device_asset_id"),
@@ -210,5 +219,20 @@ mod tests {
         // The JSON should contain assets, but no "file" key
         assert!(json.contains("assets"));
         assert!(!json.contains("\"file\""));
+    }
+
+    #[test]
+    fn asset_uuids() {
+        let mut sel = Selection {
+            file: PathBuf::from("test_selection.json"),
+            assets: HashMap::new(),
+        };
+        let asset = default_asset();
+        let asset_id = asset.id.clone();
+        sel.add_asset(asset);
+
+        let uuids = sel.asset_uuids();
+        assert_eq!(uuids.len(), 1);
+        assert_eq!(uuids[0], Uuid::parse_str(&asset_id).unwrap());
     }
 }

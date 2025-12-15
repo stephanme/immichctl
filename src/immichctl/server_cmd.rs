@@ -58,7 +58,7 @@ impl ImmichCtl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::immichctl::{ImmichCtl, config::Config, tests::create_immichctl_with_server};
+    use crate::immichctl::{ImmichCtl, tests::create_immichctl_with_server};
     use mockito::Server;
 
     #[tokio::test]

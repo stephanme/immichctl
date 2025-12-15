@@ -2,6 +2,7 @@ mod config;
 mod selection;
 mod selection_cmd;
 mod server_cmd;
+mod tag_cmd;
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 

@@ -5,8 +5,8 @@ use std::collections::HashMap;
 enum Method {
     Get,
     Post,
-    // Put,
-    // Delete,
+    Put,
+    Delete,
     // Options,
     // Head,
     // Patch,
@@ -29,6 +29,8 @@ fn main() {
         ("/auth/validateToken", vec![Method::Post]),
         ("/search/metadata", vec![Method::Post]),
         ("/tags", vec![Method::Get]),
+        ("/tags/assets", vec![Method::Put]),
+        ("/tags/{id}/assets", vec![Method::Delete]),
         ("/albums", vec![Method::Get]),
     ]);
 
@@ -47,9 +49,13 @@ fn main() {
         if pi.post.is_some() && !methods.contains(&Method::Post) {
             pi.post = None;
         }
+        if pi.put.is_some() && !methods.contains(&Method::Put) {
+            pi.put = None;
+        }
+        if pi.delete.is_some() && !methods.contains(&Method::Delete) {
+            pi.delete = None;
+        }
         pi.head = None;
-        pi.put = None;
-        pi.delete = None;
         pi.options = None;
         pi.patch = None;
         pi.trace = None;

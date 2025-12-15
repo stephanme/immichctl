@@ -1,6 +1,25 @@
 use assert_cmd::{Command, assert::Assert};
 use predicates::prelude::*;
+use serial_test::serial;
 use std::{env, path::Path};
+
+/*
+    The following tests require an Immich server to be running and accessible.
+    Set the environment variables IMMICH_SERVER_URL and IMMICH_API_KEY
+    to point to the server and provide a valid API key in a .env file.
+
+    These tests are marked with #[serial] to ensure they run sequentially,
+    as they depend on shared state (the login session).
+
+    Tests assume the server has certain assets and albums/tags set up:
+    - An album named "CF Day EU 2025" containing 7 assets (not modified by tests).
+    - A tag named "immichctl/tag1" assigned to 2 assets (not modified by tests).
+    - A tag named "immichctl/test_tag" with no assets assigned (modified by tests).
+    - An asset with ASSET_UUID exists on the server.
+
+    Tests are supposed to cleanup after running, i.e. all resources on the server are as described above.
+    Run test test_cleanup manually in case failing tests resulted in inconsistent server state.
+*/
 
 static ASSET_UUID: &str = "a09c9ba5-45e0-40b8-82cb-55c93ff49125";
 
@@ -30,6 +49,7 @@ fn login(homedir: &Path) -> Assert {
 }
 
 #[test]
+#[serial]
 fn test_version_not_logged_in() {
     let homedir = tempfile::tempdir().unwrap();
     let mut cmd = new_cmd(homedir.path());
@@ -44,6 +64,7 @@ fn test_version_not_logged_in() {
 }
 
 #[test]
+#[serial]
 fn test_login() {
     let homedir = tempfile::tempdir().unwrap();
 
@@ -67,6 +88,7 @@ fn test_login() {
 }
 
 #[test]
+#[serial]
 fn test_logout() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());
@@ -85,6 +107,7 @@ fn test_logout() {
 }
 
 #[test]
+#[serial]
 fn test_selection_not_logged_in() {
     let homedir = tempfile::tempdir().unwrap();
     let mut cmd = new_cmd(homedir.path());
@@ -95,6 +118,7 @@ fn test_selection_not_logged_in() {
 }
 
 #[test]
+#[serial]
 fn test_selection_add_remove_id() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());
@@ -128,6 +152,7 @@ fn test_selection_add_remove_id() {
 }
 
 #[test]
+#[serial]
 fn test_selection_album() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());
@@ -152,6 +177,7 @@ fn test_selection_album() {
 }
 
 #[test]
+#[serial]
 fn test_selection_tag() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());
@@ -173,4 +199,63 @@ fn test_selection_tag() {
     cmd.assert().success().stdout(predicate::str::contains(
         "Removed 2 asset(s) from selection.",
     ));
+}
+
+#[test]
+#[serial]
+fn test_tag() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    // check that test_tag is not used
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("selection")
+        .arg("add")
+        .arg("--tag")
+        .arg("immichctl/test_tag");
+    cmd.assert().success();
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("selection").arg("count");
+    cmd.assert().success().stdout(predicate::eq("0\n"));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("selection")
+        .arg("add")
+        .arg("--tag")
+        .arg("immichctl/tag1");
+    cmd.assert().success();
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("selection").arg("count");
+    cmd.assert().success().stdout(predicate::eq("2\n"));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("tag").arg("add").arg("immichctl/test_tag");
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Tagged 2 assets with 'immichctl/test_tag'.",
+    ));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("tag").arg("remove").arg("immichctl/test_tag");
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Untagged 2 assets from 'immichctl/test_tag'.",
+    ));
+}
+
+#[test]
+#[serial]
+fn test_cleanup() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    // check that test_tag is not used
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("selection")
+        .arg("add")
+        .arg("--tag")
+        .arg("immichctl/test_tag");
+    cmd.assert().success();
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("tag").arg("remove").arg("immichctl/test_tag");
+    cmd.assert().success();
 }

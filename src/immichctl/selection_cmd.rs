@@ -117,18 +117,7 @@ impl ImmichCtl {
             search_dto.id = Some(uuid);
         }
         if let Some(tag_name) = tag {
-            let tags_resp = self
-                .immich()?
-                .get_all_tags()
-                .await
-                .context("Could not retrieve tags")?;
-            let tag_id = Self::find_tag_by_name(tag_name, &tags_resp);
-            match tag_id {
-                Some(uuid) => search_dto.tag_ids = Some(vec![uuid]),
-                None => {
-                    bail!("Tag not found: '{}'", tag_name);
-                }
-            }
+            search_dto.tag_ids = Some(vec![self.find_tag_by_name(tag_name).await?]);
         }
         if let Some(album_name) = album {
             let albums_resp = self
@@ -151,18 +140,36 @@ impl ImmichCtl {
         Ok(search_dto)
     }
 
-    /// Find a tag by its full name (including parent tags separated by '/').
-    /// If there is no match by full name, search by simple name.
-    /// Returns the UUID of the tag if found.
-    fn find_tag_by_name(name: &str, tags: &[TagResponseDto]) -> Option<Uuid> {
-        let found_tag = tags
+    pub async fn find_tag_by_name(&self, name: &str) -> Result<Uuid> {
+        let tags_resp = self
+            .immich()?
+            .get_all_tags()
+            .await
+            .context("Could not retrieve tags")?;
+        let tag_id = Self::_find_tag_by_name(name, &tags_resp);
+        match tag_id {
+            Some(uuid) => Ok(uuid),
+            None => {
+                bail!("Tag not found or not unique: '{}'", name);
+            }
+        }
+    }
+    /// Find a tag by its full or simple name (full name = including parent tags separated by '/').
+    /// Returns the UUID of the tag if found and unambiguous.
+    fn _find_tag_by_name(name: &str, tags: &[TagResponseDto]) -> Option<Uuid> {
+        let matching_tags: Vec<_> = tags
             .iter()
-            .find(|t| t.value == name)
-            .or(tags.iter().find(|t| t.name == name));
-        found_tag.and_then(|found_tag| Uuid::parse_str(&found_tag.id).ok())
+            .filter(|t| t.name == name || t.value == name)
+            .collect();
+
+        if matching_tags.len() == 1 {
+            return Uuid::parse_str(&matching_tags[0].id).ok();
+        }
+
+        None
     }
 
-    fn find_album_by_name(name: &str, albums: &[AlbumResponseDto]) -> Option<Uuid> {
+    pub fn find_album_by_name(name: &str, albums: &[AlbumResponseDto]) -> Option<Uuid> {
         albums
             .iter()
             .find(|a| a.album_name == name)
@@ -280,52 +287,76 @@ mod tests {
                 "root2/otherchild",
                 Some("5460dc82-2353-47d1-878c-2f15a1084002"),
             ),
+            create_tag(
+                "5460dc82-2353-47d1-878c-2f15a1084007",
+                "root1/non-unique-child",
+                Some("5460dc82-2353-47d1-878c-2f15a1084001"),
+            ),
+            create_tag(
+                "5460dc82-2353-47d1-878c-2f15a1084008",
+                "root2/non-unique-child",
+                Some("5460dc82-2353-47d1-878c-2f15a1084002"),
+            ),
         ];
 
         // Find a root tag
         assert_eq!(
-            ImmichCtl::find_tag_by_name("root1", &tags),
+            ImmichCtl::_find_tag_by_name("root1", &tags),
             Uuid::parse_str("5460dc82-2353-47d1-878c-2f15a1084001").ok()
         );
 
         // Find a nested tag (1 level)
         assert_eq!(
-            ImmichCtl::find_tag_by_name("root1/child1", &tags),
+            ImmichCtl::_find_tag_by_name("root1/child1", &tags),
             Uuid::parse_str("5460dc82-2353-47d1-878c-2f15a1084003").ok()
         );
 
         // Find a deeply nested tag (2 levels)
         assert_eq!(
-            ImmichCtl::find_tag_by_name("root1/child1/grandchild1", &tags),
+            ImmichCtl::_find_tag_by_name("root1/child1/grandchild1", &tags),
             Uuid::parse_str("5460dc82-2353-47d1-878c-2f15a1084005").ok()
         );
 
         // Tag not found (root)
-        assert_eq!(ImmichCtl::find_tag_by_name("nonexistent", &tags), None);
+        assert_eq!(ImmichCtl::_find_tag_by_name("nonexistent", &tags), None);
 
         // Tag not found (child)
         assert_eq!(
-            ImmichCtl::find_tag_by_name("root1/nonexistent", &tags),
+            ImmichCtl::_find_tag_by_name("root1/nonexistent", &tags),
             None
         );
 
         // Tag not found (grandchild)
         assert_eq!(
-            ImmichCtl::find_tag_by_name("root1/child1/nonexistent", &tags),
+            ImmichCtl::_find_tag_by_name("root1/child1/nonexistent", &tags),
             None
         );
 
         // Correct child, wrong parent
-        assert_eq!(ImmichCtl::find_tag_by_name("root2/child1", &tags), None);
+        assert_eq!(ImmichCtl::_find_tag_by_name("root2/child1", &tags), None);
 
         // find by simple name when full name not found
         assert_eq!(
-            ImmichCtl::find_tag_by_name("otherchild", &tags),
+            ImmichCtl::_find_tag_by_name("otherchild", &tags),
             Uuid::parse_str("5460dc82-2353-47d1-878c-2f15a1084006").ok()
         );
         assert_eq!(
-            ImmichCtl::find_tag_by_name("child1", &tags),
+            ImmichCtl::_find_tag_by_name("child1", &tags),
             Uuid::parse_str("5460dc82-2353-47d1-878c-2f15a1084003").ok()
+        );
+
+        // find non-uniquie-child by full path but not by simple name
+        assert_eq!(
+            ImmichCtl::_find_tag_by_name("root1/non-unique-child", &tags),
+            Uuid::parse_str("5460dc82-2353-47d1-878c-2f15a1084007").ok()
+        );
+        assert_eq!(
+            ImmichCtl::_find_tag_by_name("root2/non-unique-child", &tags),
+            Uuid::parse_str("5460dc82-2353-47d1-878c-2f15a1084008").ok()
+        );
+        assert_eq!(
+            ImmichCtl::_find_tag_by_name("non-unique-child", &tags),
+            None
         );
     }
 
@@ -411,7 +442,7 @@ mod tests {
             .await;
         tags_mock.expect(2).assert_async().await;
         assert!(result.is_err());
-        assert_eq!(result.err().unwrap().to_string(), "Tag not found: 'no-tag'");
+        assert_eq!(result.err().unwrap().to_string(), "Tag not found or not unique: 'no-tag'");
         Ok(())
     }
 
