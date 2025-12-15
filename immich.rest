@@ -24,3 +24,10 @@ Content-Type: application/json
     "tagIds": ["125b20bb-d6d4-48cc-a2c9-9c558661f4a1"]
 //    "albumIds": ["813928b7-59e8-4152-b891-70ace027352d"]
 }
+
+### Assets
+@asset_id = 7db9a7f6-7342-4c57-8481-f9078e57f656
+
+### Get Asset
+GET http://{{immich_host}}/api/assets/{{asset_id}}
+x-api-key: {{immich_api_key}}

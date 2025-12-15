@@ -2,12 +2,14 @@
 
 immichctl is a command line tool to manage [Immich](https://docs.immich.app) assets and implement missing UI functions.
 
+immichctl doesn't handle upload and download of assets as there are command line tools like [immich-go](https://github.com/simulot/immich-go) that implement this perfectly.
+
 ## General
 
-`immichctl <operation/command/verb> <type> <options>`
+`immichctl <subject> <operation/command/verb> <options>`
 
-- command/verb: get, create, delete, add, remove, adjust, login, version ...
-- type: selection, tag, album
+- type: selection, tag, album, timestamp
+- command/verb: list, create, delete, add, remove, adjust, login, version ...
 
 ## Server Commands
 
@@ -38,6 +40,12 @@ The current asset selection is stored in `$HOME/.immchctl/selection.json`.
 ### List selection
 
 `immichctl selection list`
+`immichctl selection list -c id -c file -c datetime`
+`immichctl selection list --format csv -c created -c timezone`
+
+`immichctl selection list --format json`
+`immichctl selection list --format json-pretty`
+
 
 ### Clear selection
 
@@ -72,7 +80,7 @@ Assets of an album:
 ## Tag Commands
 
 Tags can be assigned/unassigned to the selected assets. Tags are not created or deleted, i.e. the tag must already exist before it can be added.
-Tags can be specified with full hierarchical name (e.g. `parent/child`) or with just the tag name (`child`).
+Tags can be specified with full hierarchical name (e.g. `parent/child`) or with just the tag name (`child`) if the name is unambiguous.
 
 ### Add tag to selection
 

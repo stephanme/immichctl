@@ -1,7 +1,8 @@
-use super::ImmichCtl;
 use super::selection::Selection;
-use super::types::{AlbumResponseDto, MetadataSearchDto, TagResponseDto};
+use super::types::{AlbumResponseDto, AssetResponseDto, MetadataSearchDto, TagResponseDto};
+use super::{AssetColumns, ImmichCtl};
 use anyhow::{Context, Result, bail};
+use chrono::FixedOffset;
 use uuid::Uuid;
 
 impl ImmichCtl {
@@ -18,11 +19,48 @@ impl ImmichCtl {
         println!("{}", sel.len());
     }
 
-    pub fn selection_list(&self) {
+    pub fn selection_list_json(&self, pretty: bool) -> Result<()> {
+        let sel = Selection::load(&self.selection_file);
+        let assets: Vec<_> = sel.list_assets().collect();
+        let stdout = std::io::stdout();
+        let writer = stdout.lock();
+        if pretty {
+            serde_json::to_writer_pretty(writer, &assets)?;
+        } else {
+            serde_json::to_writer(writer, &assets)?;
+        }
+        Ok(())
+    }
+
+    pub fn selection_list_csv(&self, columns: &[AssetColumns]) {
         let sel = Selection::load(&self.selection_file);
         for asset in sel.list_assets() {
-            println!("{}, {}", asset.id, asset.original_file_name);
+            for (i, col) in columns.iter().enumerate() {
+                if i > 0 {
+                    print!(",");
+                }
+                let timezone = Self::asset_timezone_offset(asset);
+                match col {
+                    AssetColumns::Id => print!("{}", asset.id),
+                    AssetColumns::OriginalFileName => print!("{}", asset.original_file_name),
+                    AssetColumns::FileCreatedAt => print!("{}", asset.file_created_at),
+                    AssetColumns::Timezone => print!("{}", timezone),
+                    AssetColumns::DateTimeOriginal => {
+                        let dt_with_tz = asset.file_created_at.with_timezone(&timezone);
+                        print!("{}", dt_with_tz)
+                    }
+                }
+            }
+            println!();
         }
+    }
+
+    fn asset_timezone_offset(asset: &AssetResponseDto) -> FixedOffset {
+        let delta = asset
+            .local_date_time
+            .signed_duration_since(asset.file_created_at);
+        let delta_sec = delta.num_seconds() as i32;
+        FixedOffset::east_opt(delta_sec).unwrap_or_else(|| FixedOffset::east_opt(0).unwrap())
     }
 
     pub async fn selection_add(
@@ -180,10 +218,12 @@ impl ImmichCtl {
 #[cfg(test)]
 mod tests {
     use crate::immichctl::tests::create_immichctl_with_server;
-    use crate::immichctl::types::{UserAvatarColor, UserResponseDto};
+    use crate::immichctl::types::{
+        AssetTypeEnum, AssetVisibility, UserAvatarColor, UserResponseDto,
+    };
 
     use super::*;
-    use chrono::DateTime;
+    use chrono::{DateTime, TimeZone, Utc};
 
     fn create_tag(id: &str, value: &str, parent_id: Option<&str>) -> TagResponseDto {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
@@ -198,6 +238,50 @@ mod tests {
             created_at: timestamp,
             updated_at: timestamp,
             color: None,
+        }
+    }
+
+    fn create_asset_with_timestamps(
+        file_created_at: DateTime<Utc>,
+        local_date_time: DateTime<Utc>,
+    ) -> AssetResponseDto {
+        let timestamp = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+
+        AssetResponseDto {
+            id: Uuid::new_v4().to_string(),
+            original_file_name: "test.jpg".to_string(),
+            file_created_at,
+            local_date_time,
+            checksum: "checksum".to_string(),
+            created_at: timestamp,
+            device_asset_id: "device_asset_id".to_string(),
+            device_id: "device_id".to_string(),
+            duplicate_id: None,
+            duration: "0:00".to_string(),
+            exif_info: None,
+            file_modified_at: timestamp,
+            has_metadata: true,
+            is_archived: false,
+            is_favorite: false,
+            is_offline: false,
+            is_trashed: false,
+            library_id: None,
+            live_photo_video_id: None,
+            original_mime_type: None,
+            original_path: "original_path".to_string(),
+            owner: None,
+            owner_id: "owner_id".to_string(),
+            people: vec![],
+            tags: vec![],
+            type_: AssetTypeEnum::Image,
+            updated_at: timestamp,
+            resized: None,
+            stack: None,
+            thumbhash: None,
+            unassigned_faces: vec![],
+            visibility: AssetVisibility::Timeline,
         }
     }
 
@@ -233,6 +317,42 @@ mod tests {
             last_modified_asset_timestamp: None,
             order: None,
         }
+    }
+
+    #[test]
+    fn test_asset_timezone_offset() {
+        // Case 1: Positive offset (+2 hours)
+        let file_created_at = Utc.with_ymd_and_hms(2024, 1, 1, 10, 0, 0).unwrap();
+        let local_date_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+        let asset = create_asset_with_timestamps(file_created_at, local_date_time);
+        assert_eq!(
+            ImmichCtl::asset_timezone_offset(&asset),
+            FixedOffset::east_opt(2 * 3600).unwrap()
+        );
+
+        // Case 2: Negative offset (-3 hours)
+        let local_date_time = Utc.with_ymd_and_hms(2024, 1, 1, 7, 0, 0).unwrap();
+        let asset = create_asset_with_timestamps(file_created_at, local_date_time);
+        assert_eq!(
+            ImmichCtl::asset_timezone_offset(&asset),
+            FixedOffset::east_opt(-3 * 3600).unwrap()
+        );
+
+        // Case 3: Zero offset (UTC)
+        let local_date_time = Utc.with_ymd_and_hms(2024, 1, 1, 10, 0, 0).unwrap();
+        let asset = create_asset_with_timestamps(file_created_at, local_date_time);
+        assert_eq!(
+            ImmichCtl::asset_timezone_offset(&asset),
+            FixedOffset::east_opt(0).unwrap()
+        );
+
+        // Case 4: Out-of-range offset (> 24 hours), should default to UTC
+        let local_date_time = Utc.with_ymd_and_hms(2024, 1, 2, 12, 0, 0).unwrap(); // 26 hours difference
+        let asset = create_asset_with_timestamps(file_created_at, local_date_time);
+        assert_eq!(
+            ImmichCtl::asset_timezone_offset(&asset),
+            FixedOffset::east_opt(0).unwrap()
+        );
     }
 
     #[test]
@@ -442,7 +562,10 @@ mod tests {
             .await;
         tags_mock.expect(2).assert_async().await;
         assert!(result.is_err());
-        assert_eq!(result.err().unwrap().to_string(), "Tag not found or not unique: 'no-tag'");
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "Tag not found or not unique: 'no-tag'"
+        );
         Ok(())
     }
 

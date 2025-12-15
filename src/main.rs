@@ -2,7 +2,7 @@ mod immichctl;
 
 use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
-use immichctl::ImmichCtl;
+use immichctl::{AssetColumns, ImmichCtl};
 
 /// A command line interface for Immich.
 #[derive(Parser, Debug)]
@@ -60,7 +60,19 @@ enum SelectionCommands {
     /// Count items in the local selection store
     Count,
     /// List asset ids in the local selection store
-    List,
+    List {
+        /// Output format
+        #[arg(long, default_value = "csv", value_enum)]
+        format: ListFormat,
+        /// Columns to display
+        #[arg(
+            short,
+            long = "column",
+            default_value = "original-file-name",
+            value_enum
+        )]
+        columns: Vec<AssetColumns>,
+    },
     /// Remove an asset from the local selection by searching metadata
     Remove {
         /// Asset id to remove (UUID)
@@ -73,6 +85,17 @@ enum SelectionCommands {
         #[arg(long, value_name = "album name")]
         album: Option<String>,
     },
+}
+
+/// Columns for CSV listing of selected assets
+#[derive(clap::ValueEnum, Clone, Debug)]
+enum ListFormat {
+    /// CSV format
+    Csv,
+    /// Json format
+    Json,
+    /// Json format, pretty printed
+    JsonPretty,
 }
 
 #[derive(Subcommand, Debug)]
@@ -129,9 +152,11 @@ async fn _main(cli: &Cli) -> Result<()> {
             SelectionCommands::Count => {
                 immichctl.selection_count();
             }
-            SelectionCommands::List => {
-                immichctl.selection_list();
-            }
+            SelectionCommands::List { format, columns } => match format {
+                ListFormat::Csv => immichctl.selection_list_csv(columns),
+                ListFormat::Json => immichctl.selection_list_json(false)?,
+                ListFormat::JsonPretty => immichctl.selection_list_json(true)?,
+            },
             SelectionCommands::Remove { id, tag, album } => {
                 immichctl.selection_remove(id, tag, album).await?;
             }

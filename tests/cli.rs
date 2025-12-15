@@ -203,6 +203,53 @@ fn test_selection_tag() {
 
 #[test]
 #[serial]
+fn test_selection_list() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("selection").arg("add").arg("--id").arg(ASSET_UUID);
+    cmd.assert().success();
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("selection").arg("list");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("PXL_20251007_101205558.jpg"));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("selection")
+        .arg("list")
+        .arg("-c")
+        .arg("id")
+        .arg("-c")
+        .arg("file");
+    cmd.assert().success().stdout(predicate::str::contains(
+        ASSET_UUID.to_owned() + ",PXL_20251007_101205558.jpg",
+    ));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("selection").arg("list").arg("--format").arg("json");
+    cmd.assert().success().stdout(
+        predicate::str::contains("PXL_20251007_101205558.jpg")
+            .and(predicate::str::contains(ASSET_UUID))
+            .and(predicate::str::contains("[{")),
+    );
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("selection")
+        .arg("list")
+        .arg("--format")
+        .arg("json-pretty");
+    cmd.assert().success().stdout(
+        predicate::str::contains("PXL_20251007_101205558.jpg")
+            .and(predicate::str::contains(ASSET_UUID))
+            .and(predicate::str::contains("[\n  {")),
+    );
+}
+
+#[test]
+#[serial]
 fn test_tag() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());

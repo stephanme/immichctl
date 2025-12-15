@@ -10,6 +10,24 @@ use anyhow::{Result, anyhow, bail};
 use config::Config;
 use std::path::{Path, PathBuf};
 
+/// Columns for CSV listing of selected assets
+#[derive(clap::ValueEnum, Clone, Debug)]
+pub enum AssetColumns {
+    /// Asset UUID
+    Id,
+    /// Original file name (alias: file)
+    #[value(alias("file"))]
+    OriginalFileName,
+    /// File creation timestamp [UTC] (alias: created)
+    #[value(alias("created"))]
+    FileCreatedAt,
+    /// Timezone (= DateTimeOriginal - created)
+    Timezone,
+    /// DateTimeOriginal from Exif with timezone (alias: datetime)
+    #[value(alias("datetime"))]
+    DateTimeOriginal,
+}
+
 pub struct ImmichCtl {
     config: Config,
     immich: Result<Client>,
