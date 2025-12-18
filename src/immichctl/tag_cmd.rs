@@ -1,11 +1,11 @@
-use crate::immichctl::selection::Selection;
+use crate::immichctl::assets::Assets;
 use crate::immichctl::types::TagBulkAssetsDto;
 use crate::immichctl::{ImmichCtl, types::BulkIdsDto};
 use anyhow::{Context, Result};
 
 impl ImmichCtl {
-    pub async fn tag_add(&mut self, name: &str) -> Result<()> {
-        let sel = Selection::load(&self.selection_file);
+    pub async fn tag_assign(&mut self, name: &str) -> Result<()> {
+        let sel = Assets::load(&self.assets_file);
         if sel.is_empty() {
             println!("Selection is empty, nothing to tag.");
             return Ok(());
@@ -25,8 +25,8 @@ impl ImmichCtl {
         Ok(())
     }
 
-    pub async fn tag_remove(&mut self, name: &str) -> Result<()> {
-        let sel = Selection::load(&self.selection_file);
+    pub async fn tag_unassign(&mut self, name: &str) -> Result<()> {
+        let sel = Assets::load(&self.assets_file);
         if sel.is_empty() {
             println!("Selection is empty, nothing to untag.");
             return Ok(());

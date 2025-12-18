@@ -1,6 +1,6 @@
+mod asset_cmd;
+mod assets;
 mod config;
-mod selection;
-mod selection_cmd;
 mod server_cmd;
 mod tag_cmd;
 
@@ -31,7 +31,7 @@ pub enum AssetColumns {
 pub struct ImmichCtl {
     config: Config,
     immich: Result<Client>,
-    selection_file: PathBuf,
+    assets_file: PathBuf,
 }
 
 impl ImmichCtl {
@@ -44,7 +44,7 @@ impl ImmichCtl {
     pub fn with_config_dir(config_dir: &Path) -> Self {
         let config_file = config_dir.join("config.json");
         let config = Config::load(&config_file);
-        let selection_file = config_dir.join("selection.json");
+        let assets_file = config_dir.join("assets.json");
 
         // immich client gets rebuild when config changes, i.e. for login command
         let immich = Self::build_client(&config);
@@ -52,7 +52,7 @@ impl ImmichCtl {
         ImmichCtl {
             config,
             immich,
-            selection_file,
+            assets_file,
         }
     }
 

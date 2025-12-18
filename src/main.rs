@@ -29,22 +29,27 @@ enum Commands {
     },
     /// Logout from the current Immich instance
     Logout,
-    /// Manage the selection
-    Selection {
+    /// Manage the asset selection
+    #[command(visible_aliases = ["asset", "a"])]
+    Assets {
         #[command(subcommand)]
-        command: SelectionCommands,
+        command: AssetCommands,
     },
     /// Tag selected assets
-    Tag {
+    #[command(visible_aliases = ["tag", "t"])]
+    Tags {
         #[command(subcommand)]
         command: TagCommands,
     },
 }
 
 #[derive(Subcommand, Debug)]
-enum SelectionCommands {
-    /// Add an asset to the local selection by searching metadata
-    Add {
+enum AssetCommands {
+    /// Search for assets and add/remove them to/from the local asset selection.
+    Search {
+        /// Remove assets from selection instead of adding
+        #[arg(long)]
+        remove: bool,
         /// Asset id to add (UUID)
         #[arg(long, value_name = "asset id")]
         id: Option<String>,
@@ -73,18 +78,6 @@ enum SelectionCommands {
         )]
         columns: Vec<AssetColumns>,
     },
-    /// Remove an asset from the local selection by searching metadata
-    Remove {
-        /// Asset id to remove (UUID)
-        #[arg(long, value_name = "asset id")]
-        id: Option<String>,
-        /// Tag name to search and remove by tag id
-        #[arg(long, value_name = "tag name")]
-        tag: Option<String>,
-        /// Album name to search
-        #[arg(long, value_name = "album name")]
-        album: Option<String>,
-    },
 }
 
 /// Columns for CSV listing of selected assets
@@ -100,13 +93,13 @@ enum ListFormat {
 
 #[derive(Subcommand, Debug)]
 enum TagCommands {
-    /// Add a tag to selected assets
-    Add {
+    /// Assign a tag to selected assets
+    Assign {
         /// Tag name to add
         name: String,
     },
-    /// Remove a tag from selected assets
-    Remove {
+    /// Unassign a tag from selected assets
+    Unassign {
         /// Tag name to remove
         name: String,
     },
@@ -142,31 +135,37 @@ async fn _main(cli: &Cli) -> Result<()> {
         Commands::Logout => {
             immichctl.logout()?;
         }
-        Commands::Selection { command } => match command {
-            SelectionCommands::Add { id, tag, album } => {
-                immichctl.selection_add(id, tag, album).await?;
+        Commands::Assets { command } => match command {
+            AssetCommands::Search {
+                remove,
+                id,
+                tag,
+                album,
+            } => {
+                if *remove {
+                    immichctl.assets_search_remove(id, tag, album).await?;
+                } else {
+                    immichctl.assets_search_add(id, tag, album).await?;
+                }
             }
-            SelectionCommands::Clear => {
-                immichctl.selection_clear()?;
+            AssetCommands::Clear => {
+                immichctl.assets_clear()?;
             }
-            SelectionCommands::Count => {
-                immichctl.selection_count();
+            AssetCommands::Count => {
+                immichctl.assets_count();
             }
-            SelectionCommands::List { format, columns } => match format {
-                ListFormat::Csv => immichctl.selection_list_csv(columns),
-                ListFormat::Json => immichctl.selection_list_json(false)?,
-                ListFormat::JsonPretty => immichctl.selection_list_json(true)?,
+            AssetCommands::List { format, columns } => match format {
+                ListFormat::Csv => immichctl.assets_list_csv(columns),
+                ListFormat::Json => immichctl.assets_list_json(false)?,
+                ListFormat::JsonPretty => immichctl.assets_list_json(true)?,
             },
-            SelectionCommands::Remove { id, tag, album } => {
-                immichctl.selection_remove(id, tag, album).await?;
-            }
         },
-        Commands::Tag { command } => match command {
-            TagCommands::Add { name } => {
-                immichctl.tag_add(name).await?;
+        Commands::Tags { command } => match command {
+            TagCommands::Assign { name } => {
+                immichctl.tag_assign(name).await?;
             }
-            TagCommands::Remove { name } => {
-                immichctl.tag_remove(name).await?;
+            TagCommands::Unassign { name } => {
+                immichctl.tag_unassign(name).await?;
             }
         },
     }

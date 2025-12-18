@@ -1,4 +1,4 @@
-use super::selection::Selection;
+use super::assets::Assets;
 use super::types::{AlbumResponseDto, AssetResponseDto, MetadataSearchDto, TagResponseDto};
 use super::{AssetColumns, ImmichCtl};
 use anyhow::{Context, Result, bail};
@@ -6,21 +6,21 @@ use chrono::FixedOffset;
 use uuid::Uuid;
 
 impl ImmichCtl {
-    pub fn selection_clear(&mut self) -> Result<()> {
-        let mut sel = Selection::load(&self.selection_file);
+    pub fn assets_clear(&mut self) -> Result<()> {
+        let mut sel = Assets::load(&self.assets_file);
         sel.clear();
-        sel.save().context("Could not save selection")?;
-        println!("Selection cleared.");
+        sel.save().context("Could not save asset selection")?;
+        println!("Asset selection cleared.");
         Ok(())
     }
 
-    pub fn selection_count(&self) {
-        let sel = Selection::load(&self.selection_file);
+    pub fn assets_count(&self) {
+        let sel = Assets::load(&self.assets_file);
         println!("{}", sel.len());
     }
 
-    pub fn selection_list_json(&self, pretty: bool) -> Result<()> {
-        let sel = Selection::load(&self.selection_file);
+    pub fn assets_list_json(&self, pretty: bool) -> Result<()> {
+        let sel = Assets::load(&self.assets_file);
         let assets: Vec<_> = sel.list_assets().collect();
         let stdout = std::io::stdout();
         let writer = stdout.lock();
@@ -32,8 +32,8 @@ impl ImmichCtl {
         Ok(())
     }
 
-    pub fn selection_list_csv(&self, columns: &[AssetColumns]) {
-        let sel = Selection::load(&self.selection_file);
+    pub fn assets_list_csv(&self, columns: &[AssetColumns]) {
+        let sel = Assets::load(&self.assets_file);
         for asset in sel.list_assets() {
             for (i, col) in columns.iter().enumerate() {
                 if i > 0 {
@@ -63,7 +63,7 @@ impl ImmichCtl {
         FixedOffset::east_opt(delta_sec).unwrap_or_else(|| FixedOffset::east_opt(0).unwrap())
     }
 
-    pub async fn selection_add(
+    pub async fn assets_search_add(
         &mut self,
         id: &Option<String>,
         tag: &Option<String>,
@@ -71,7 +71,7 @@ impl ImmichCtl {
     ) -> Result<()> {
         let mut body = self.build_search_dto(id, tag, album).await?;
 
-        let mut sel = Selection::load(&self.selection_file);
+        let mut sel = Assets::load(&self.assets_file);
         let old_len = sel.len();
         // TODO map OpenAPI number to i32 (instead of f64)
         let mut page = 1f64;
@@ -103,7 +103,7 @@ impl ImmichCtl {
         Ok(())
     }
 
-    pub async fn selection_remove(
+    pub async fn assets_search_remove(
         &mut self,
         id: &Option<String>,
         tag: &Option<String>,
@@ -111,7 +111,7 @@ impl ImmichCtl {
     ) -> Result<()> {
         let mut body = self.build_search_dto(id, tag, album).await?;
 
-        let mut sel = Selection::load(&self.selection_file);
+        let mut sel = Assets::load(&self.assets_file);
         let old_len = sel.len();
         // TODO map OpenAPI number to i32 (instead of f64)
         let mut page = 1f64;

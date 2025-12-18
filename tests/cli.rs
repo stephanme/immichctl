@@ -108,10 +108,10 @@ fn test_logout() {
 
 #[test]
 #[serial]
-fn test_selection_not_logged_in() {
+fn test_assets_search_not_logged_in() {
     let homedir = tempfile::tempdir().unwrap();
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection").arg("add").arg("--id").arg(ASSET_UUID);
+    cmd.arg("assets").arg("search").arg("--id").arg(ASSET_UUID);
     cmd.assert()
         .failure()
         .stderr(predicate::str::contains("Error: Not logged in."));
@@ -119,27 +119,28 @@ fn test_selection_not_logged_in() {
 
 #[test]
 #[serial]
-fn test_selection_add_remove_id() {
+fn test_assets_search_id() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection").arg("clear");
+    cmd.arg("assets").arg("clear");
     cmd.assert().success();
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection").arg("add").arg("--id").arg(ASSET_UUID);
+    cmd.arg("assets").arg("search").arg("--id").arg(ASSET_UUID);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("Added 1 asset(s) to selection."));
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection").arg("count");
+    cmd.arg("assets").arg("count");
     cmd.assert().success().stdout(predicate::eq("1\n"));
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection")
-        .arg("remove")
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--remove")
         .arg("--id")
         .arg(ASSET_UUID);
     cmd.assert().success().stdout(predicate::str::contains(
@@ -147,19 +148,19 @@ fn test_selection_add_remove_id() {
     ));
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection").arg("count");
+    cmd.arg("assets").arg("count");
     cmd.assert().success().stdout(predicate::eq("0\n"));
 }
 
 #[test]
 #[serial]
-fn test_selection_album() {
+fn test_assets_search_album() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection")
-        .arg("add")
+    cmd.arg("assets")
+        .arg("search")
         .arg("--album")
         .arg("CF Day EU 2025");
     cmd.assert()
@@ -167,8 +168,9 @@ fn test_selection_album() {
         .stdout(predicate::str::contains("Added 7 asset(s) to selection."));
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection")
-        .arg("remove")
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--remove")
         .arg("--album")
         .arg("CF Day EU 2025");
     cmd.assert().success().stdout(predicate::str::contains(
@@ -178,13 +180,13 @@ fn test_selection_album() {
 
 #[test]
 #[serial]
-fn test_selection_tag() {
+fn test_assets_search_tag() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection")
-        .arg("add")
+    cmd.arg("assets")
+        .arg("search")
         .arg("--tag")
         .arg("immichctl/tag1");
     cmd.assert()
@@ -192,8 +194,9 @@ fn test_selection_tag() {
         .stdout(predicate::str::contains("Added 2 asset(s) to selection."));
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection")
-        .arg("remove")
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--remove")
         .arg("--tag")
         .arg("immichctl/tag1");
     cmd.assert().success().stdout(predicate::str::contains(
@@ -203,22 +206,22 @@ fn test_selection_tag() {
 
 #[test]
 #[serial]
-fn test_selection_list() {
+fn test_assets_list() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection").arg("add").arg("--id").arg(ASSET_UUID);
+    cmd.arg("assets").arg("search").arg("--id").arg(ASSET_UUID);
     cmd.assert().success();
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection").arg("list");
+    cmd.arg("assets").arg("list");
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("PXL_20251007_101205558.jpg"));
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection")
+    cmd.arg("assets")
         .arg("list")
         .arg("-c")
         .arg("id")
@@ -229,7 +232,7 @@ fn test_selection_list() {
     ));
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection").arg("list").arg("--format").arg("json");
+    cmd.arg("assets").arg("list").arg("--format").arg("json");
     cmd.assert().success().stdout(
         predicate::str::contains("PXL_20251007_101205558.jpg")
             .and(predicate::str::contains(ASSET_UUID))
@@ -237,7 +240,7 @@ fn test_selection_list() {
     );
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection")
+    cmd.arg("assets")
         .arg("list")
         .arg("--format")
         .arg("json-pretty");
@@ -256,33 +259,33 @@ fn test_tag() {
 
     // check that test_tag is not used
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection")
-        .arg("add")
+    cmd.arg("assets")
+        .arg("search")
         .arg("--tag")
         .arg("immichctl/test_tag");
     cmd.assert().success();
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection").arg("count");
+    cmd.arg("assets").arg("count");
     cmd.assert().success().stdout(predicate::eq("0\n"));
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection")
-        .arg("add")
+    cmd.arg("assets")
+        .arg("search")
         .arg("--tag")
         .arg("immichctl/tag1");
     cmd.assert().success();
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection").arg("count");
+    cmd.arg("assets").arg("count");
     cmd.assert().success().stdout(predicate::eq("2\n"));
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("tag").arg("add").arg("immichctl/test_tag");
+    cmd.arg("tag").arg("assign").arg("immichctl/test_tag");
     cmd.assert().success().stdout(predicate::str::contains(
         "Tagged 2 assets with 'immichctl/test_tag'.",
     ));
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("tag").arg("remove").arg("immichctl/test_tag");
+    cmd.arg("tag").arg("unassign").arg("immichctl/test_tag");
     cmd.assert().success().stdout(predicate::str::contains(
         "Untagged 2 assets from 'immichctl/test_tag'.",
     ));
@@ -296,13 +299,13 @@ fn test_cleanup() {
 
     // check that test_tag is not used
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("selection")
-        .arg("add")
+    cmd.arg("assets")
+        .arg("search")
         .arg("--tag")
         .arg("immichctl/test_tag");
     cmd.assert().success();
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("tag").arg("remove").arg("immichctl/test_tag");
+    cmd.arg("tag").arg("unassign").arg("immichctl/test_tag");
     cmd.assert().success();
 }

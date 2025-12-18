@@ -32,60 +32,57 @@ immichctl doesn't handle upload and download of assets as there are command line
 
 - remove login information
 
-## Manage Asset Selections
+## Manage Assets
 
-Most immichctl commands like adding/removing tags, adjusting timestamps etc. work on asset selections.
-The current asset selection is stored in `$HOME/.immchctl/selection.json`. 
+Most immichctl commands like assigning tags, adjusting timestamps etc. work on an asset selection.
+The current asset selection is stored in `$HOME/.immchctl/assets.json`. 
 
-### List selection
+### Search for assets
 
-`immichctl selection list`
-`immichctl selection list -c id -c file -c datetime`
-`immichctl selection list --format csv -c created -c timezone`
-
-`immichctl selection list --format json`
-`immichctl selection list --format json-pretty`
-
-
-### Clear selection
-
-`immichctl selection clear`
-
-### Count selection
-
-`immichctl selection count`
-
-### Add assets to selection
+The assets returned by the Immich search are added to the asset selection.
 
 Single asset by id:
-`immichctl selection add --id <asset id>`
+`immichctl assets search --id <asset id>`
 
 Tagged assets:
-`immichctl selection add --tag <tag>`
+`immichctl assets search --tag <tag>`
 
 Assets of an album:
-`immichctl selection add --album <album>`
+`immichctl assets search --album <album>`
 
 ### Remove assets from selection
 
-Single asset by id:
-`immichctl selection remove --id <asset id>`
+When `--remove` is specified, the assets returned by the Immich search are removed from the asset selection. E.g.:
 
-Tagged assets:
-`immichctl selection remove --tag <tag>`
+`immichctl assets serach --remove --tag <tag>`
 
-Assets of an album:
-`immichctl selection remove --album <album>`
+### List assets
+
+`immichctl assets list`
+`immichctl assets list -c id -c file -c datetime`
+`immichctl assets list --format csv -c created -c timezone`
+
+`immichctl assets list --format json`
+`immichctl assets list --format json-pretty`
+
+### Clear asset selection
+
+`immichctl assets clear`
+
+### Count assets selection
+
+`immichctl assets count`
+
 
 ## Tag Commands
 
 Tags can be assigned/unassigned to the selected assets. Tags are not created or deleted, i.e. the tag must already exist before it can be added.
 Tags can be specified with full hierarchical name (e.g. `parent/child`) or with just the tag name (`child`) if the name is unambiguous.
 
-### Add tag to selection
+### Assign tag to assets
 
-`immichctl tag add <tag>`
+`immichctl tag assign <tag name>`
 
-### Remove tag from selection
+### Unassing tag from assets
 
-`immichctl tag remove <tag>`
+`immichctl tag unassign <tag name>`

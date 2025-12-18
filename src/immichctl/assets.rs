@@ -10,28 +10,28 @@ use crate::immichctl::types::AssetResponseDto;
 
 // could keep asset data on disk only to avoid large memory usage
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Selection {
+pub struct Assets {
     #[serde(skip)]
     file: PathBuf,
 
     assets: HashMap<String, AssetResponseDto>,
 }
 
-impl Selection {
-    pub fn load(file: &Path) -> Selection {
+impl Assets {
+    pub fn load(file: &Path) -> Assets {
         match Self::load_selection(file) {
             Some(mut s) => {
                 s.file = file.to_path_buf();
                 s
             }
-            None => Selection {
+            None => Assets {
                 file: file.to_path_buf(),
                 assets: HashMap::new(),
             },
         }
     }
 
-    fn load_selection(file: &Path) -> Option<Selection> {
+    fn load_selection(file: &Path) -> Option<Assets> {
         if !file.exists() {
             return None;
         }
@@ -45,10 +45,10 @@ impl Selection {
     pub fn save(&self) -> Result<()> {
         fs::create_dir_all(self.file.parent().unwrap())?;
         let contents = serde_json::to_string_pretty(&self)
-            .context("Could not save selection, serialization error")?;
-        let mut file = fs::File::create(&self.file).context("Could not save selection.")?;
+            .context("Could not save asset selection, serialization error")?;
+        let mut file = fs::File::create(&self.file).context("Could not save asset selection.")?;
         file.write_all(contents.as_bytes())
-            .context("Could not save selection.")?;
+            .context("Could not save asset selection.")?;
         Ok(())
     }
 
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn add_remove_list_assets() {
-        let mut sel = Selection {
+        let mut sel = Assets {
             file: PathBuf::from("test_selection.json"),
             assets: HashMap::new(),
         };
@@ -170,11 +170,11 @@ mod tests {
     }
 
     #[test]
-    fn load_nonexistent_creates_empty_selection() {
+    fn load_nonexistent_creates_empty_asset_selection() {
         let path = tmp_path("load_nonexistent");
         // ensure file does not exist
         let _ = fs::remove_file(&path);
-        let sel = Selection::load(&path);
+        let sel = Assets::load(&path);
         assert_eq!(sel.assets.len(), 0);
         assert_eq!(sel.file, path);
     }
@@ -184,10 +184,10 @@ mod tests {
         let path = tmp_path("roundtrip_no_assets");
         let _ = fs::remove_file(&path);
 
-        let sel = Selection::load(&path);
+        let sel = Assets::load(&path);
         sel.save().expect("save failed");
 
-        let loaded = Selection::load(&path);
+        let loaded = Assets::load(&path);
         assert_eq!(loaded.assets.len(), 0);
         // file path is set on load
         assert_eq!(loaded.file, path);
@@ -198,12 +198,12 @@ mod tests {
         let path = tmp_path("roundtrip_with_assets");
         let _ = fs::remove_file(&path);
 
-        let mut sel = Selection::load(&path);
+        let mut sel = Assets::load(&path);
         let asset = default_asset();
         sel.add_asset(asset);
         sel.save().expect("save failed");
 
-        let loaded = Selection::load(&path);
+        let loaded = Assets::load(&path);
         assert_eq!(loaded.len(), 1);
         // file path is set on load
         assert_eq!(loaded.file, path);
@@ -213,7 +213,7 @@ mod tests {
     fn serialization_skips_file_field() {
         let path = tmp_path("serialize_skip");
         let _ = fs::remove_file(&path);
-        let sel = Selection::load(&path);
+        let sel = Assets::load(&path);
 
         let json = serde_json::to_string(&sel).expect("serialize");
         // The JSON should contain assets, but no "file" key
@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn asset_uuids() {
-        let mut sel = Selection {
+        let mut sel = Assets {
             file: PathBuf::from("test_selection.json"),
             assets: HashMap::new(),
         };
