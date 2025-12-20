@@ -69,8 +69,12 @@ impl Assets {
         self.assets.remove(asset_id);
     }
 
-    pub fn list_assets(&self) -> impl Iterator<Item = &AssetResponseDto> {
+    pub fn iter_assets(&self) -> impl Iterator<Item = &AssetResponseDto> {
         self.assets.values()
+    }
+
+    pub fn iter_mut_assets(&mut self) -> impl Iterator<Item = &mut AssetResponseDto> {
+        self.assets.values_mut()
     }
 
     pub fn asset_uuids(&self) -> Vec<Uuid> {
@@ -150,7 +154,7 @@ mod tests {
         assert_eq!(sel.len(), 1);
         assert!(sel.contains(&asset_id));
 
-        let assets: Vec<&AssetResponseDto> = sel.list_assets().collect();
+        let assets: Vec<&AssetResponseDto> = sel.iter_assets().collect();
         assert_eq!(assets.len(), 1);
         assert_eq!(assets[0].id, asset_id);
 

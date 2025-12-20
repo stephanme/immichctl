@@ -1,8 +1,11 @@
 mod immichctl;
+mod timedelta;
 
 use anyhow::{Result, bail};
+use chrono::{FixedOffset, TimeDelta};
 use clap::{Parser, Subcommand};
 use immichctl::{AssetColumns, ImmichCtl};
+use timedelta::TimeDeltaValue;
 
 /// A command line interface for Immich.
 #[derive(Parser, Debug)]
@@ -45,6 +48,8 @@ enum Commands {
 
 #[derive(Subcommand, Debug)]
 enum AssetCommands {
+    /// Clear the local selection store
+    Clear,
     /// Search for assets and add/remove them to/from the local asset selection.
     Search {
         /// Remove assets from selection instead of adding
@@ -60,8 +65,8 @@ enum AssetCommands {
         #[arg(long, value_name = "album name")]
         album: Option<String>,
     },
-    /// Clear the local selection store
-    Clear,
+    /// Refresh asset metadata including exif data (slow)
+    Refresh,
     /// Count items in the local selection store
     Count,
     /// List asset ids in the local selection store
@@ -77,6 +82,17 @@ enum AssetCommands {
             value_enum
         )]
         columns: Vec<AssetColumns>,
+    },
+    /// Adjust dateTimeOriginal and timezone of selected assets
+    Datetime {
+        /// dateTimeOriginal offset, e.g. 1d1h1m or -2h30m
+        #[arg(long, value_name = "offset")]
+        offset: Option<TimeDeltaValue>,
+        /// New timezone in format ±HH:MM
+        #[arg(long, value_name = "timezone")]
+        timezone: Option<FixedOffset>,
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -154,11 +170,27 @@ async fn _main(cli: &Cli) -> Result<()> {
             AssetCommands::Count => {
                 immichctl.assets_count();
             }
+            AssetCommands::Refresh => {
+                immichctl.assets_refresh().await?;
+            }
             AssetCommands::List { format, columns } => match format {
                 ListFormat::Csv => immichctl.assets_list_csv(columns),
                 ListFormat::Json => immichctl.assets_list_json(false)?,
                 ListFormat::JsonPretty => immichctl.assets_list_json(true)?,
             },
+            AssetCommands::Datetime {
+                offset,
+                timezone,
+                dry_run,
+            } => {
+                let o = match offset {
+                    Some(v) => **v,
+                    None => TimeDelta::zero(),
+                };
+                immichctl
+                    .assets_datetime_adjust(&o, timezone, *dry_run)
+                    .await?;
+            }
         },
         Commands::Tags { command } => match command {
             TagCommands::Assign { name } => {

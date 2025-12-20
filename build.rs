@@ -32,6 +32,7 @@ fn main() {
         ("/tags/assets", vec![Method::Put]),
         ("/tags/{id}/assets", vec![Method::Delete]),
         ("/albums", vec![Method::Get]),
+        ("/assets/{id}", vec![Method::Get, Method::Put]),
     ]);
 
     // Retain only paths that have at least one allowed operation.

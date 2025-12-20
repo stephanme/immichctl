@@ -11,7 +11,7 @@ use config::Config;
 use std::path::{Path, PathBuf};
 
 /// Columns for CSV listing of selected assets
-#[derive(clap::ValueEnum, Clone, Debug)]
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
 pub enum AssetColumns {
     /// Asset UUID
     Id,
@@ -23,9 +23,15 @@ pub enum AssetColumns {
     FileCreatedAt,
     /// Timezone (= DateTimeOriginal - created)
     Timezone,
-    /// DateTimeOriginal from Exif with timezone (alias: datetime)
+    /// DateTimeOriginal from asset metadata with timezone (alias: datetime)
     #[value(alias("datetime"))]
     DateTimeOriginal,
+
+    /// Timezone from EXIF metadata
+    ExifTimezone,
+    /// DateTimeOriginal from EXIF metadata with timezone (alias: exif-datetime)
+    #[value(alias("exif-datetime"))]
+    ExifDateTimeOriginal,
 }
 
 pub struct ImmichCtl {
