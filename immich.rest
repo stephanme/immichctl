@@ -26,7 +26,8 @@ Content-Type: application/json
 }
 
 ### Assets
-@asset_id = a09c9ba5-45e0-40b8-82cb-55c93ff49125
+// @asset_id = a09c9ba5-45e0-40b8-82cb-55c93ff49125
+@asset_id = 7db9a7f6-7342-4c57-8481-f9078e57f656
 
 ### Get Asset
 GET http://{{immich_host}}/api/assets/{{asset_id}}

@@ -65,15 +65,13 @@ impl ImmichCtl {
     }
 
     fn asset_column(asset: &AssetResponseDto, col: AssetColumns) -> Cow<'_, str> {
-        let timezone = Self::asset_timezone_offset(asset);
         match col {
             AssetColumns::Id => Cow::Borrowed(&asset.id),
             AssetColumns::OriginalFileName => Cow::Borrowed(&asset.original_file_name),
             AssetColumns::FileCreatedAt => Cow::Owned(asset.file_created_at.to_rfc3339()),
-            AssetColumns::Timezone => Cow::Owned(timezone.to_string()),
+            AssetColumns::Timezone => Cow::Owned(Self::asset_timezone_offset(asset).to_string()),
             AssetColumns::DateTimeOriginal => {
-                let dt_with_tz = asset.file_created_at.with_timezone(&timezone);
-                Cow::Owned(dt_with_tz.to_rfc3339())
+                Cow::Owned(Self::get_assert_date_time_original(asset).to_rfc3339())
             }
             AssetColumns::ExifTimezone => {
                 if let Some(exif_info) = &asset.exif_info {
@@ -87,88 +85,13 @@ impl ImmichCtl {
                 }
             }
             AssetColumns::ExifDateTimeOriginal => {
-                if let Some(exif_info) = &asset.exif_info {
-                    // use timezone from asset metadata if missing in EXIF (should not happen)
-                    let tz = if let Some(tz_str) = &exif_info.time_zone {
-                        match Self::parse_exif_timezone(tz_str) {
-                            Ok(tz) => tz,
-                            _ => timezone,
-                        }
-                    } else {
-                        timezone
-                    };
-                    if let Some(date_time_original) = &exif_info.date_time_original {
-                        Cow::Owned(date_time_original.with_timezone(&tz).to_rfc3339())
-                    } else {
-                        Cow::Borrowed("")
-                    }
+                if let Some(date_time_original) = Self::get_exif_date_time_original(asset) {
+                    Cow::Owned(date_time_original.to_rfc3339())
                 } else {
                     Cow::Borrowed("")
                 }
             }
         }
-    }
-
-    fn asset_timezone_offset(asset: &AssetResponseDto) -> FixedOffset {
-        let delta = asset
-            .local_date_time
-            .signed_duration_since(asset.file_created_at);
-        let delta_sec = delta.num_seconds() as i32;
-        FixedOffset::east_opt(delta_sec).unwrap_or_else(|| FixedOffset::east_opt(0).unwrap())
-    }
-
-    fn parse_exif_timezone(tz_str: &str) -> Result<FixedOffset> {
-        let tz_str = tz_str.trim();
-        if tz_str.is_empty() {
-            bail!("Timezone string cannot be empty");
-        }
-
-        // Handle "UTC" prefix
-        let tz_str = if let Some(stripped) = tz_str.strip_prefix("UTC") {
-            stripped
-        } else {
-            tz_str
-        };
-
-        let sign_char = tz_str
-            .chars()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("Invalid timezone format: missing sign"))?;
-        let sign = match sign_char {
-            '+' => 1,
-            '-' => -1,
-            _ => bail!("Timezone must start with '+' or '-'"),
-        };
-
-        let mut parts = tz_str[1..].split(':');
-        let hours_str = parts.next().unwrap_or("");
-        let minutes_str = parts.next().unwrap_or("0");
-
-        let (hours, minutes) = if !hours_str.contains(':') && hours_str.len() > 2 {
-            // Handle "HHMM" format
-            if hours_str.len() != 4 {
-                bail!(
-                    "Invalid timezone format: expected HHMM, found '{}'",
-                    hours_str
-                );
-            }
-            let h = hours_str[0..2].parse::<i32>()?;
-            let m = hours_str[2..4].parse::<i32>()?;
-            (h, m)
-        } else {
-            // Handle "H", "HH", or "H:MM", "HH:MM"
-            let h = hours_str.parse::<i32>()?;
-            let m = minutes_str.parse::<i32>()?;
-            (h, m)
-        };
-
-        if hours > 14 || minutes > 59 {
-            bail!("Invalid timezone offset: hours must be <= 14 and minutes <= 59");
-        }
-
-        let total_seconds = (hours * 3600 + minutes * 60) * sign;
-        FixedOffset::east_opt(total_seconds)
-            .ok_or_else(|| anyhow::anyhow!("Invalid timezone offset value: {}", tz_str))
     }
 
     pub async fn assets_search_add(
@@ -301,14 +224,12 @@ impl ImmichCtl {
     ) -> Result<()> {
         let mut sel = Assets::load(&self.assets_file);
         for asset in sel.iter_mut_assets() {
-            let date_time_original = Self::adjust_date_time_original(asset, offset, timezone);
+            let (old_date_time_original, new_date_time_original) =
+                Self::adjust_date_time_original(asset, offset, timezone);
             if dry_run {
-                let old_date_time_original = asset
-                    .file_created_at
-                    .with_timezone(&Self::asset_timezone_offset(asset));
                 println!(
                     "{}: {} -> {}",
-                    asset.original_file_name, old_date_time_original, date_time_original
+                    asset.original_file_name, old_date_time_original, new_date_time_original
                 );
                 continue;
             }
@@ -321,16 +242,17 @@ impl ImmichCtl {
                 .update_asset(
                     &uuid,
                     &UpdateAssetDto {
-                        date_time_original: Some(date_time_original.to_rfc3339()),
+                        date_time_original: Some(new_date_time_original.to_rfc3339()),
                         ..Default::default()
                     },
                 )
                 .await
                 .with_context(|| format!("Could not update asset '{}'", asset.id))?;
-            // !!! file_created_at and local_date_time are not updated in the response, exif data is updated !!!
+            // !!! response: file_created_at and local_date_time are not updated, only exif data is updated !!!
             *asset = asset_res.into_inner();
         }
         if !dry_run {
+            println!("Updated date/time for {} assets.", sel.len());
             sel.save()?;
         }
         Ok(())
@@ -340,17 +262,106 @@ impl ImmichCtl {
         asset: &AssetResponseDto,
         offset: &TimeDelta,
         new_timezone: &Option<FixedOffset>,
-    ) -> chrono::DateTime<FixedOffset> {
-        let asset_tz = Self::asset_timezone_offset(asset);
+    ) -> (chrono::DateTime<FixedOffset>, chrono::DateTime<FixedOffset>) {
+        let date_time_original = Self::get_exif_date_time_original(asset)
+            .unwrap_or_else(|| Self::get_assert_date_time_original(asset));
+
+        let asset_tz = date_time_original.timezone();
         let tz = if let Some(tz) = new_timezone {
             tz
         } else {
             &asset_tz
         };
-        let timezone_offset = tz.utc_minus_local() - asset_tz.utc_minus_local();
-        let date_time_original =
-            asset.file_created_at + chrono::Duration::seconds(timezone_offset as i64) + *offset;
-        date_time_original.with_timezone(tz)
+        // let timezone_offset = tz.utc_minus_local() - asset_tz.utc_minus_local();
+        let new_date_time_original = date_time_original + *offset;
+        // date_time_original + chrono::Duration::seconds(timezone_offset as i64) + *offset;
+        (date_time_original, new_date_time_original.with_timezone(tz))
+    }
+
+    fn get_exif_date_time_original(
+        asset: &AssetResponseDto,
+    ) -> Option<chrono::DateTime<FixedOffset>> {
+        if let Some(exif_info) = &asset.exif_info
+            && let Some(date_time_original) = &exif_info.date_time_original
+        {
+            let tz = if let Some(tz_str) = &exif_info.time_zone {
+                match Self::parse_exif_timezone(tz_str) {
+                    Ok(tz) => tz,
+                    _ => Self::asset_timezone_offset(asset),
+                }
+            } else {
+                Self::asset_timezone_offset(asset)
+            };
+            return Some(date_time_original.with_timezone(&tz));
+        }
+        None
+    }
+
+    fn get_assert_date_time_original(asset: &AssetResponseDto) -> chrono::DateTime<FixedOffset> {
+        let tz = Self::asset_timezone_offset(asset);
+        asset.file_created_at.with_timezone(&tz)
+    }
+
+    fn asset_timezone_offset(asset: &AssetResponseDto) -> FixedOffset {
+        let delta = asset
+            .local_date_time
+            .signed_duration_since(asset.file_created_at);
+        let delta_sec = delta.num_seconds() as i32;
+        FixedOffset::east_opt(delta_sec).unwrap_or_else(|| FixedOffset::east_opt(0).unwrap())
+    }
+
+    fn parse_exif_timezone(tz_str: &str) -> Result<FixedOffset> {
+        let tz_str = tz_str.trim();
+        if tz_str.is_empty() {
+            bail!("Timezone string cannot be empty");
+        }
+
+        // Handle "UTC" prefix
+        let tz_str = if let Some(stripped) = tz_str.strip_prefix("UTC") {
+            stripped
+        } else {
+            tz_str
+        };
+
+        let sign_char = tz_str
+            .chars()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Invalid timezone format: missing sign"))?;
+        let sign = match sign_char {
+            '+' => 1,
+            '-' => -1,
+            _ => bail!("Timezone must start with '+' or '-'"),
+        };
+
+        let mut parts = tz_str[1..].split(':');
+        let hours_str = parts.next().unwrap_or("");
+        let minutes_str = parts.next().unwrap_or("0");
+
+        let (hours, minutes) = if !hours_str.contains(':') && hours_str.len() > 2 {
+            // Handle "HHMM" format
+            if hours_str.len() != 4 {
+                bail!(
+                    "Invalid timezone format: expected HHMM, found '{}'",
+                    hours_str
+                );
+            }
+            let h = hours_str[0..2].parse::<i32>()?;
+            let m = hours_str[2..4].parse::<i32>()?;
+            (h, m)
+        } else {
+            // Handle "H", "HH", or "H:MM", "HH:MM"
+            let h = hours_str.parse::<i32>()?;
+            let m = minutes_str.parse::<i32>()?;
+            (h, m)
+        };
+
+        if hours > 14 || minutes > 59 {
+            bail!("Invalid timezone offset: hours must be <= 14 and minutes <= 59");
+        }
+
+        let total_seconds = (hours * 3600 + minutes * 60) * sign;
+        FixedOffset::east_opt(total_seconds)
+            .ok_or_else(|| anyhow::anyhow!("Invalid timezone offset value: {}", tz_str))
     }
 }
 
@@ -787,7 +798,7 @@ mod tests {
     }
 
     #[test]
-    fn test_adjust_date_time_original() {
+    fn test_adjust_date_time_original_no_exif() {
         let file_created_at = Utc.with_ymd_and_hms(2024, 1, 1, 10, 0, 0).unwrap();
         let local_date_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap(); // +2h offset
         let asset = create_asset_with_timestamps(file_created_at, local_date_time);
@@ -796,29 +807,79 @@ mod tests {
         let offset = TimeDelta::zero();
         let new_timezone = None;
         let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
-        assert_eq!(result.to_rfc3339(), "2024-01-01T12:00:00+02:00");
+        assert_eq!(result.0.to_rfc3339(), "2024-01-01T12:00:00+02:00");
+        assert_eq!(result.1.to_rfc3339(), "2024-01-01T12:00:00+02:00");
 
         // Positive offset, no timezone change
         let offset = TimeDelta::hours(1);
         let new_timezone = None;
         let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
-        assert_eq!(result.to_rfc3339(), "2024-01-01T13:00:00+02:00");
+        assert_eq!(result.1.to_rfc3339(), "2024-01-01T13:00:00+02:00");
 
         // Negative offset, no timezone change
         let offset = TimeDelta::hours(-3);
         let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
-        assert_eq!(result.to_rfc3339(), "2024-01-01T09:00:00+02:00");
+        assert_eq!(result.1.to_rfc3339(), "2024-01-01T09:00:00+02:00");
 
         // Timezone change, no offset
         let offset = TimeDelta::zero();
+        let new_timezone = Some(FixedOffset::east_opt(0).unwrap()); // UTC
+        let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
+        assert_eq!(result.1.to_rfc3339(), "2024-01-01T10:00:00+00:00");
         let new_timezone = Some(FixedOffset::east_opt(5 * 3600).unwrap()); // +5h
         let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
-        assert_eq!(result.to_rfc3339(), "2024-01-01T12:00:00+05:00");
+        assert_eq!(result.1.to_rfc3339(), "2024-01-01T15:00:00+05:00");
 
         // Both offset and timezone change
         let offset = TimeDelta::minutes(30);
         let new_timezone = Some(FixedOffset::east_opt(-4 * 3600).unwrap()); // -4h
         let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
-        assert_eq!(result.to_rfc3339(), "2024-01-01T12:30:00-04:00");
+        assert_eq!(result.1.to_rfc3339(), "2024-01-01T06:30:00-04:00");
+    }
+
+    #[test]
+    fn test_adjust_date_time_original_with_exif() {
+        let file_created_at = Utc.with_ymd_and_hms(2024, 1, 1, 10, 0, 1).unwrap(); // modified seconds
+        let local_date_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 1).unwrap(); // +2h offset
+        let exif_date_time = Utc.with_ymd_and_hms(2024, 1, 1, 10, 0, 0).unwrap();
+        let asset = create_asset_with_exif(
+            file_created_at,
+            local_date_time,
+            Some(exif_date_time),
+            Some("+02:00".to_string()),
+        );
+
+        // No offset, no timezone change
+        let offset = TimeDelta::zero();
+        let new_timezone = None;
+        let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
+        assert_eq!(result.0.to_rfc3339(), "2024-01-01T12:00:00+02:00");
+        assert_eq!(result.1.to_rfc3339(), "2024-01-01T12:00:00+02:00");
+
+        // Positive offset, no timezone change
+        let offset = TimeDelta::hours(1);
+        let new_timezone = None;
+        let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
+        assert_eq!(result.1.to_rfc3339(), "2024-01-01T13:00:00+02:00");
+
+        // Negative offset, no timezone change
+        let offset = TimeDelta::hours(-3);
+        let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
+        assert_eq!(result.1.to_rfc3339(), "2024-01-01T09:00:00+02:00");
+
+        // Timezone change, no offset
+        let offset = TimeDelta::zero();
+        let new_timezone = Some(FixedOffset::east_opt(0).unwrap()); // UTC
+        let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
+        assert_eq!(result.1.to_rfc3339(), "2024-01-01T10:00:00+00:00");
+        let new_timezone = Some(FixedOffset::east_opt(5 * 3600).unwrap()); // +5h
+        let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
+        assert_eq!(result.1.to_rfc3339(), "2024-01-01T15:00:00+05:00");
+
+        // Both offset and timezone change
+        let offset = TimeDelta::minutes(30);
+        let new_timezone = Some(FixedOffset::east_opt(-4 * 3600).unwrap()); // -4h
+        let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
+        assert_eq!(result.1.to_rfc3339(), "2024-01-01T06:30:00-04:00");
     }
 }

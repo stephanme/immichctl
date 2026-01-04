@@ -253,6 +253,116 @@ fn test_assets_list() {
 
 #[test]
 #[serial]
+fn test_assets_refresh_exif_data() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("search").arg("--id").arg(ASSET_UUID);
+    cmd.assert().success();
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("list")
+        .arg("-c")
+        .arg("file")
+        .arg("-c")
+        .arg("datetime")
+        .arg("-c")
+        .arg("exif-datetime");
+    cmd.assert().success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T12:12:05.558+02:00,\n",
+    ));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("refresh");
+    cmd.assert().success();
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("list")
+        .arg("-c")
+        .arg("file")
+        .arg("-c")
+        .arg("datetime")
+        .arg("-c")
+        .arg("exif-datetime");
+    cmd.assert().success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T12:12:05.558+02:00,2025-10-07T12:12:05.558+02:00\n",
+    ));
+}
+
+#[test]
+#[serial]
+fn test_assets_datatime_dryrun() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("search").arg("--id").arg(ASSET_UUID);
+    cmd.assert().success();
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("datetime").arg("--dry-run");
+    cmd.assert().success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg: 2025-10-07 12:12:05.558 +02:00 -> 2025-10-07 12:12:05.558 +02:00",
+    ));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("datetime")
+        .arg("--timezone")
+        .arg("+00:00")
+        .arg("--dry-run");
+    cmd.assert().success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg: 2025-10-07 12:12:05.558 +02:00 -> 2025-10-07 10:12:05.558 +00:00",
+    ));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("datetime")
+        .arg("--offset")
+        .arg("+1h30m")
+        .arg("--dry-run");
+    cmd.assert().success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg: 2025-10-07 12:12:05.558 +02:00 -> 2025-10-07 13:42:05.558 +02:00",
+    ));
+}
+
+#[test]
+#[serial]
+fn test_assets_datatime() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("search").arg("--id").arg(ASSET_UUID);
+    cmd.assert().success();
+
+    // dummy change
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("datetime");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Updated date/time for 1 assets."));
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("list")
+        .arg("-c")
+        .arg("file")
+        .arg("-c")
+        .arg("datetime")
+        .arg("-c")
+        .arg("exif-datetime");
+    cmd.assert().success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T12:12:05.558+02:00,2025-10-07T12:12:05.558+02:00\n",
+    ));
+
+    // for more tests: need a command to reset the datetime to the original value
+}
+
+#[test]
+#[serial]
 fn test_tag() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());

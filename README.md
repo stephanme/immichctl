@@ -65,6 +65,8 @@ When `--remove` is specified, the assets returned by the Immich search are remov
 `immichctl assets list --format json`
 `immichctl assets list --format json-pretty`
 
+`immichctl assets list --help` - for all options
+
 ### Clear asset selection
 
 `immichctl assets clear`
@@ -73,6 +75,23 @@ When `--remove` is specified, the assets returned by the Immich search are remov
 
 `immichctl assets count`
 
+### Refresh assets selection
+
+Refreshes the metadata of the assets selection. Loads additional metadata like exif metadata.
+Requires one request per assets, i.e. the operation can be slow.
+
+`immichctl assets refresh`
+
+### Adjust assets date, time and timezone info
+
+Allows to correct a misconfigured timezone or date/time settings of a camera.
+The current/base timestamp and timezone is taken from exif `dateTimeOriginal` and `timeZone` if available otherwise from asset metadata (`fileCreatedAt` and `localDateTime`).
+Check the change with `--dry-run` before applying.
+
+`immichctl assets datatime --dry-run` - prints timestamp instead of changing it
+
+`immichctl assets datatime --timezone <timezone offset>` - set timezone (e.g. to +02:00)
+`immichctl assets datatime --offset <offset>` - adjust timestamp by an offset (e.g. -1d2h30m)
 
 ## Tag Commands
 
