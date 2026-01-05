@@ -34,8 +34,10 @@ immichctl doesn't handle upload and download of assets as there are command line
 
 ### Curl
 
-`immichctl curl /server/version`
-`immichctl curl --method post /search/metadata -data '{"id":"<uuid>"}'`
+```
+immichctl curl /server/version
+immichctl curl --method post /search/metadata -data '{"id":"<uuid>"}'
+```
 
 - see [Immich API doc](https://api.immich.app/introduction)
 - takes care for authentication and immich API url prefix
@@ -51,13 +53,13 @@ The current asset selection is stored in `$HOME/.immchctl/assets.json`.
 
 The assets returned by the Immich search are added to the asset selection.
 
-Single asset by id:
+Single asset by id:<br/>
 `immichctl assets search --id <asset id>`
 
-Tagged assets:
+Tagged assets:<br/>
 `immichctl assets search --tag <tag>`
 
-Assets of an album:
+Assets of an album:<br/>
 `immichctl assets search --album <album>`
 
 ### Remove assets from selection
@@ -68,14 +70,17 @@ When `--remove` is specified, the assets returned by the Immich search are remov
 
 ### List assets
 
-`immichctl assets list`
-`immichctl assets list -c id -c file -c datetime`
-`immichctl assets list --format csv -c created -c timezone`
+```
+immichctl assets list
+immichctl assets list -c id -c file -c datetime
+immichctl assets list --format csv -c created -c timezone
 
-`immichctl assets list --format json`
-`immichctl assets list --format json-pretty`
+immichctl assets list --format json
+immichctl assets list --format json-pretty
 
-`immichctl assets list --help` - for all options
+# for all options
+immichctl assets list --help
+```
 
 ### Clear asset selection
 
@@ -96,12 +101,17 @@ Requires one request per assets, i.e. the operation can be slow.
 
 Allows to correct a misconfigured timezone or date/time settings of a camera.
 The current/base timestamp and timezone is taken from exif `dateTimeOriginal` and `timeZone` if available otherwise from asset metadata (`fileCreatedAt` and `localDateTime`).
+
 Check the change with `--dry-run` before applying.
 
-`immichctl assets datatime --dry-run` - prints timestamp instead of changing it
+Prints timestamp instead of changing it:<br/>
+`immichctl assets datatime --dry-run`
 
-`immichctl assets datatime --timezone <timezone offset>` - set timezone (e.g. to +02:00)
-`immichctl assets datatime --offset <offset>` - adjust timestamp by an offset (e.g. -1d2h30m)
+Set timezone (e.g. to +02:00):<br/>
+`immichctl assets datatime --timezone <timezone offset>`
+
+Adjust timestamp by an offset (e.g. -1d2h30m):<br/>
+`immichctl assets datatime --offset <offset>`
 
 ## Tag Commands
 
