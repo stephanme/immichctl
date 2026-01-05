@@ -48,6 +48,40 @@ fn login(homedir: &Path) -> Assert {
     }
 }
 
+fn wait_for_running_jobs(homedir: &Path) {
+    let mut ok = false;
+    for _i in 1..=50 {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let mut cmd = new_cmd(homedir);
+        cmd.arg("curl").arg("/jobs");
+        let output = cmd.output().expect("curl /jobs failed");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        //println!("Jobs: {}", stdout);
+        // parse stdout as json and wait until no jobs are running, i.e. *.queueStatus.active == false
+        let jobs: serde_json::Value =
+            serde_json::from_str(&stdout).expect("Invalid JSON from /jobs");
+        let active_queues = jobs
+            .as_object()
+            .expect("Jobs is not an object")
+            .iter()
+            .filter(|job| {
+                job.1
+                    .get("queueStatus")
+                    .and_then(|qs| qs.get("isActive"))
+                    .and_then(|a| a.as_bool())
+                    .unwrap_or(true)
+            })
+            .count();
+
+        if active_queues == 0 {
+            //println!("No active jobs remaining after {} iterations", _i);
+            ok = true;
+            break;
+        }
+    }
+    assert!(ok, "Background jobs still active after waiting period");
+}
+
 #[test]
 #[serial]
 fn test_version_not_logged_in() {
@@ -345,8 +379,9 @@ fn test_assets_datatime() {
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("Updated date/time for 1 assets."));
-    let mut cmd = new_cmd(homedir.path());
-    cmd.arg("assets")
+    let mut listcmd = new_cmd(homedir.path());
+    listcmd
+        .arg("assets")
         .arg("list")
         .arg("-c")
         .arg("file")
@@ -354,11 +389,59 @@ fn test_assets_datatime() {
         .arg("datetime")
         .arg("-c")
         .arg("exif-datetime");
-    cmd.assert().success().stdout(predicate::str::contains(
+    listcmd.assert().success().stdout(predicate::str::contains(
         "PXL_20251007_101205558.jpg,2025-10-07T12:12:05.558+02:00,2025-10-07T12:12:05.558+02:00\n",
     ));
 
-    // for more tests: need a command to reset the datetime to the original value
+    // offset +1h
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("datetime").arg("--offset").arg("+1h");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Updated date/time for 1 assets."));
+    // PUT assets returns updated exif metadata but stale asset metadata, asset metadata seems to update by an immich background job (sidecar job)
+    listcmd.assert().success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T12:12:05.558+02:00,2025-10-07T13:12:05.558+02:00\n",
+    ));
+    wait_for_running_jobs(homedir.path());
+    let mut refreshcmd = new_cmd(homedir.path());
+    refreshcmd.arg("assets").arg("refresh");
+    refreshcmd.assert().success();
+    listcmd.assert().success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T13:12:05.558+02:00,2025-10-07T13:12:05.558+02:00\n",
+    ));
+
+    // timezone
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("datetime")
+        .arg("--timezone")
+        .arg("+00:00");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Updated date/time for 1 assets."));
+    // PUT assets returns updated exif metadata but stale asset metadata, asset metadata seems to update by an immich background job (metadataExtraction job)
+    listcmd.assert().success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T13:12:05.558+02:00,2025-10-07T11:12:05.558+00:00\n",
+    ));
+    wait_for_running_jobs(homedir.path());
+    refreshcmd.assert().success();
+    // TODO: bug in immich server v2.4.1: after timezone change w/o dateTimeOriginal change the asset localDateTime is not updated, only exif-datetime is updated
+    // Expected:
+    //  "PXL_20251007_101205558.jpg,2025-10-07T11:12:05.558+00:00,2025-10-07T11:12:05.558+00:00\n",
+    listcmd.assert().success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T13:12:05.558+02:00,2025-10-07T11:12:05.558+00:00\n",
+    ));
+
+    // reset datetime of ASSET_UUID
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("curl")
+        .arg("--method")
+        .arg("put")
+        .arg("assets/".to_owned() + ASSET_UUID)
+        .arg("--data")
+        .arg("{\"dateTimeOriginal\":\"2025-10-07T12:12:05.558+02:00\"}");
+    cmd.assert().success();
 }
 
 #[test]
@@ -459,6 +542,7 @@ fn test_curl() {
     );
 }
 
+// reset any changes made by tests
 #[test]
 #[serial]
 fn test_cleanup() {
@@ -475,5 +559,15 @@ fn test_cleanup() {
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("tag").arg("unassign").arg("immichctl/test_tag");
+    cmd.assert().success();
+
+    // reset datetime of ASSET_UUID
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("curl")
+        .arg("--method")
+        .arg("put")
+        .arg("assets/".to_owned() + ASSET_UUID)
+        .arg("--data")
+        .arg("{\"dateTimeOriginal\":\"2025-10-07T12:12:05.558+02:00\"}");
     cmd.assert().success();
 }

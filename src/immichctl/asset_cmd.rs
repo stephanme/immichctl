@@ -339,6 +339,10 @@ impl ImmichCtl {
         if tz_str.is_empty() {
             bail!("Timezone string cannot be empty");
         }
+        if tz_str == "UTC" {
+            return FixedOffset::east_opt(0)
+                .ok_or_else(|| anyhow::anyhow!("Invalid timezone offset value: {}", tz_str));
+        }
 
         // Handle "UTC" prefix
         let tz_str = if let Some(stripped) = tz_str.strip_prefix("UTC") {
@@ -652,6 +656,21 @@ mod tests {
             ImmichCtl::parse_exif_timezone("UTC+2").unwrap(),
             FixedOffset::east_opt(2 * 3600).unwrap()
         );
+        for tz_str in &[
+            "UTC",
+            "UTC+0",
+            "UTC-0",
+            "UTC+00:00",
+            "+00:00",
+            "-00:00",
+            "+0",
+            "-0",
+        ] {
+            assert_eq!(
+                ImmichCtl::parse_exif_timezone(tz_str).unwrap(),
+                FixedOffset::east_opt(0).unwrap()
+            );
+        }
         assert_eq!(
             ImmichCtl::parse_exif_timezone("-0530").unwrap(),
             FixedOffset::east_opt(-5 * 3600 - 30 * 60).unwrap()

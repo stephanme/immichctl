@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result,Error,bail};
 use progenitor_client::{ClientHooks, ClientInfo, OperationInfo};
 
 use super::Client;
@@ -160,10 +160,7 @@ impl ImmichCtl {
                 }
                 Ok(())
             }
-            _ => Err(
-                progenitor_client::Error::<progenitor_client::Error>::UnexpectedResponse(response)
-                    .into(),
-            ),
+            _ => bail!(progenitor_client::Error::<Error>::UnexpectedResponse(response))
         }
     }
 
