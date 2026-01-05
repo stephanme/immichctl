@@ -1,11 +1,35 @@
 use std::borrow::Cow;
 
+use super::ImmichCtl;
 use super::assets::Assets;
 use super::types::{AlbumResponseDto, AssetResponseDto, MetadataSearchDto, UpdateAssetDto};
-use super::{AssetColumns, ImmichCtl};
 use anyhow::{Context, Result, bail};
 use chrono::{FixedOffset, TimeDelta};
 use uuid::Uuid;
+
+/// Columns for CSV listing of selected assets
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+pub enum AssetColumns {
+    /// Asset UUID
+    Id,
+    /// Original file name (alias: file)
+    #[value(alias("file"))]
+    OriginalFileName,
+    /// File creation timestamp [UTC] (alias: created)
+    #[value(alias("created"))]
+    FileCreatedAt,
+    /// Timezone (= DateTimeOriginal - created)
+    Timezone,
+    /// DateTimeOriginal from asset metadata with timezone (alias: datetime)
+    #[value(alias("datetime"))]
+    DateTimeOriginal,
+
+    /// Timezone from EXIF metadata
+    ExifTimezone,
+    /// DateTimeOriginal from EXIF metadata with timezone (alias: exif-datetime)
+    #[value(alias("exif-datetime"))]
+    ExifDateTimeOriginal,
+}
 
 impl ImmichCtl {
     pub fn assets_clear(&mut self) -> Result<()> {

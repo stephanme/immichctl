@@ -4,7 +4,7 @@ mod timedelta;
 use anyhow::{Result, bail};
 use chrono::{FixedOffset, TimeDelta};
 use clap::{Parser, Subcommand};
-use immichctl::{AssetColumns, ImmichCtl};
+use immichctl::{AssetColumns, CurlMethod, ImmichCtl};
 use timedelta::TimeDeltaValue;
 
 /// A command line interface for Immich.
@@ -43,6 +43,17 @@ enum Commands {
     Tags {
         #[command(subcommand)]
         command: TagCommands,
+    },
+    /// Execute an Immich API request
+    Curl {
+        /// API endpoint path
+        path: String,
+        /// HTTP method
+        #[arg(short = 'X', long, default_value = "get")]
+        method: CurlMethod,
+        /// HTTP data to include in the request body
+        #[arg(short = 'd', long)]
+        data: Option<String>,
     },
 }
 
@@ -135,6 +146,8 @@ async fn main() {
 }
 
 async fn _main(cli: &Cli) -> Result<()> {
+    tracing_subscriber::fmt::init();
+
     let mut immichctl = ImmichCtl::new();
 
     match &cli.command {
@@ -150,6 +163,9 @@ async fn _main(cli: &Cli) -> Result<()> {
         },
         Commands::Logout => {
             immichctl.logout()?;
+        }
+        Commands::Curl { path, method, data } => {
+            immichctl.curl(path, *method, data).await?;
         }
         Commands::Assets { command } => match command {
             AssetCommands::Search {

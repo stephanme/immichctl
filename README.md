@@ -32,6 +32,16 @@ immichctl doesn't handle upload and download of assets as there are command line
 
 - remove login information
 
+### Curl
+
+`immichctl curl /server/version`
+`immichctl curl --method post /search/metadata -data '{"id":"<uuid>"}'`
+
+- see [Immich API doc](https://api.immich.app/introduction)
+- takes care for authentication and immich API url prefix
+- prints out json response on success
+- use `RUST_LOG=trace` for debugging (very verbose)
+
 ## Manage Assets
 
 Most immichctl commands like assigning tags, adjusting timestamps etc. work on an asset selection.

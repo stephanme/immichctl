@@ -18,6 +18,9 @@ regress = "0.10.5"
 anyhow = "1.0.100"
 lazy_static = "1.4.0"
 regex = "1.12.2"
+env_logger = "0.11"
+log = "0.4"
+tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 
 [build-dependencies]
 prettyplease = "0.2.22"

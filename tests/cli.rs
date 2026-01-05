@@ -403,6 +403,64 @@ fn test_tag() {
 
 #[test]
 #[serial]
+fn test_curl() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    // GET
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("curl").arg("server/version");
+    cmd.assert().success().stdout(
+        predicate::str::is_match(r#"\{\s*"major":\s*\d+,\s*"minor":\s*\d+,\s*"patch":\s*\d+\s*\}"#)
+            .unwrap(),
+    );
+
+    // 404
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("curl").arg("unknown/endpoint").arg("-X").arg("GET");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("404"));
+
+    // with query parameters
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("curl")
+        .arg("albums?assertId=".to_owned() + ASSET_UUID);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("assetCount"));
+
+    // POST with json data
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("curl")
+        .arg("--method")
+        .arg("post")
+        .arg("search/metadata")
+        .arg("--data")
+        .arg("{\"id\":\"".to_owned() + ASSET_UUID + "\"}");
+    cmd.assert().success().stdout(
+        predicate::str::contains("assets").and(
+            predicate::str::contains(ASSET_UUID).and(predicate::str::contains("\"total\": 1")),
+        ),
+    );
+
+    // POST with form data
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("curl")
+        .arg("--method")
+        .arg("post")
+        .arg("search/metadata")
+        .arg("--data")
+        .arg("id=".to_owned() + ASSET_UUID);
+    cmd.assert().success().stdout(
+        predicate::str::contains("assets").and(
+            predicate::str::contains(ASSET_UUID).and(predicate::str::contains("\"total\": 1")),
+        ),
+    );
+}
+
+#[test]
+#[serial]
 fn test_cleanup() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());

@@ -1,38 +1,18 @@
 mod asset_cmd;
 mod assets;
 mod config;
+mod curl_cmd;
 mod server_cmd;
 mod tag_cmd;
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
+pub use asset_cmd::AssetColumns;
+pub use curl_cmd::CurlMethod;
+
 use anyhow::{Result, anyhow, bail};
 use config::Config;
 use std::path::{Path, PathBuf};
-
-/// Columns for CSV listing of selected assets
-#[derive(clap::ValueEnum, Clone, Copy, Debug)]
-pub enum AssetColumns {
-    /// Asset UUID
-    Id,
-    /// Original file name (alias: file)
-    #[value(alias("file"))]
-    OriginalFileName,
-    /// File creation timestamp [UTC] (alias: created)
-    #[value(alias("created"))]
-    FileCreatedAt,
-    /// Timezone (= DateTimeOriginal - created)
-    Timezone,
-    /// DateTimeOriginal from asset metadata with timezone (alias: datetime)
-    #[value(alias("datetime"))]
-    DateTimeOriginal,
-
-    /// Timezone from EXIF metadata
-    ExifTimezone,
-    /// DateTimeOriginal from EXIF metadata with timezone (alias: exif-datetime)
-    #[value(alias("exif-datetime"))]
-    ExifDateTimeOriginal,
-}
 
 pub struct ImmichCtl {
     config: Config,
@@ -82,6 +62,7 @@ impl ImmichCtl {
         );
         let client_with_custom_defaults = reqwest::ClientBuilder::new()
             .default_headers(headers)
+            .connection_verbose(true)
             .build()?;
         let immich_api_url = config.server.clone() + "/api";
         Ok(Client::new_with_client(
