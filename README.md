@@ -4,11 +4,16 @@ immichctl is a command line tool to manage [Immich](https://docs.immich.app) ass
 
 immichctl doesn't handle upload and download of assets as there are command line tools like [immich-go](https://github.com/simulot/immich-go) that implement this perfectly.
 
+Main use cases:
+- fix timestamps and time zone of assets (e.g. because camera time was not correct)
+- check/fix missing tags after image upload caused by [immich-go #990](https://github.com/simulot/immich-go/issues/990) / [immich #16747](https://github.com/immich-app/immich/issues/16747)
+- rename/re-assign tags
+
 ## General
 
 `immichctl <subject> <operation/command/verb> <options>`
 
-- type: selection, tag, album, timestamp
+- subject: assets, tag, album, ...
 - command/verb: list, create, delete, add, remove, adjust, login, version ...
 
 ## Server Commands
