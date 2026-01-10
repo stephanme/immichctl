@@ -75,6 +75,9 @@ enum AssetCommands {
         /// Album name to search
         #[arg(long, value_name = "album name")]
         album: Option<String>,
+        /// Timezone (remove only)
+        #[arg(long)]
+        timezone: Option<FixedOffset>,
     },
     /// Refresh asset metadata including exif data (slow)
     Refresh,
@@ -173,10 +176,18 @@ async fn _main(cli: &Cli) -> Result<()> {
                 id,
                 tag,
                 album,
+                timezone,
             } => {
                 if *remove {
-                    immichctl.assets_search_remove(id, tag, album).await?;
+                    immichctl
+                        .assets_search_remove(id, tag, album, timezone)
+                        .await?;
                 } else {
+                    if let Some(_tz) = timezone {
+                        bail!(
+                            "The --timezone option can only be used when removing assets from the selection."
+                        );
+                    }
                     immichctl.assets_search_add(id, tag, album).await?;
                 }
             }

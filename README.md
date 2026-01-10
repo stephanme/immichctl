@@ -71,7 +71,10 @@ Assets of an album:<br/>
 
 When `--remove` is specified, the assets returned by the Immich search are removed from the asset selection. E.g.:
 
-`immichctl assets serach --remove --tag <tag>`
+`immichctl assets search --remove --tag <tag>`
+
+Remove assets by timezone:<br/>
+`immichctl assets search --remove --timezone <timezone>`
 
 ### List assets
 

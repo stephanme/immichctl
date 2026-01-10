@@ -205,6 +205,41 @@ fn test_assets_search_album() {
     cmd.arg("assets")
         .arg("search")
         .arg("--remove")
+        .arg("--timezone")
+        .arg("+00:00");
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Removed 0 asset(s) from selection.",
+    ));
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--remove")
+        .arg("--timezone")
+        .arg("+02:00");
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Removed 7 asset(s) from selection.",
+    ));
+}
+
+#[test]
+#[serial]
+fn test_assets_search_remove_by_timezone() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--album")
+        .arg("CF Day EU 2025");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Added 7 asset(s) to selection."));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--remove")
         .arg("--album")
         .arg("CF Day EU 2025");
     cmd.assert().success().stdout(predicate::str::contains(

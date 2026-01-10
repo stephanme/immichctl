@@ -164,20 +164,39 @@ impl ImmichCtl {
         id: &Option<String>,
         tag: &Option<String>,
         album: &Option<String>,
+        timezone: &Option<FixedOffset>,
     ) -> Result<()> {
         let mut assets = Assets::load(&self.assets_file);
         let old_len = assets.len();
 
         // check for remove operations that can be handled locally
-        if id.is_some() && tag.is_none() && album.is_none() {
-            let uuid = Uuid::parse_str(id.as_ref().unwrap()).with_context(|| {
-                format!("Invalid asset id '{}', expected uuid", id.as_ref().unwrap())
-            })?;
-            assets.remove_asset(&uuid.to_string());
-        } else {
-            let search_dto = self.build_search_dto(id, tag, album).await?;
-            self.assets_search_remove_by_immich_query(search_dto, &mut assets)
-                .await?;
+        match (id, tag, album, timezone) {
+            // remove by id
+            (Some(id), None, None, None) => {
+                let uuid = Uuid::parse_str(id)
+                    .with_context(|| format!("Invalid asset id '{}', expected uuid", id))?;
+                assets.remove_asset(&uuid.to_string());
+            }
+            // remove by timezone
+            (None, None, None, Some(tz)) => {
+                assets.retain(|asset| {
+                    let asset_tz = match ImmichCtl::exif_timezone_offset(asset) {
+                        Some(tz) => tz,
+                        None => ImmichCtl::asset_timezone_offset(asset),
+                    };
+                    asset_tz != *tz
+                });
+            }
+            _ => {
+                if let Some(_tz) = timezone {
+                    bail!(
+                        "The --timezone option cannot be used together with other search options."
+                    );
+                }
+                let search_dto = self.build_search_dto(id, tag, album).await?;
+                self.assets_search_remove_by_immich_query(search_dto, &mut assets)
+                    .await?;
+            }
         }
 
         assets.save()?;
@@ -331,6 +350,16 @@ impl ImmichCtl {
             && let Ok(tz) = Self::parse_exif_timezone(tz_str)
         {
             return Some(date_time_original.with_timezone(&tz));
+        }
+        None
+    }
+
+    fn exif_timezone_offset(asset: &AssetResponseDto) -> Option<FixedOffset> {
+        if let Some(exif_info) = &asset.exif_info
+            && let Some(tz_str) = &exif_info.time_zone
+            && let Ok(tz) = Self::parse_exif_timezone(tz_str)
+        {
+            return Some(tz);
         }
         None
     }

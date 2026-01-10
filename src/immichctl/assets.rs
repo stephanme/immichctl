@@ -69,6 +69,13 @@ impl Assets {
         self.assets.remove(asset_id);
     }
 
+    pub fn retain<F>(&mut self, f: F)
+    where
+        F: Fn(&AssetResponseDto) -> bool,
+    {
+        self.assets.retain(|_k, v| f(v));
+    }
+
     pub fn iter_assets(&self) -> impl Iterator<Item = &AssetResponseDto> {
         self.assets.values()
     }
@@ -238,5 +245,28 @@ mod tests {
         let uuids = sel.asset_uuids();
         assert_eq!(uuids.len(), 1);
         assert_eq!(uuids[0], Uuid::parse_str(&asset_id).unwrap());
+    }
+
+    #[test]
+    fn retain_assets() {
+        let mut sel = Assets {
+            file: PathBuf::from("test_selection.json"),
+            assets: HashMap::new(),
+        };
+        let mut asset1 = default_asset();
+        asset1.id = String::from("d8f91992-7329-4319-a4cb-33025753354a");
+        let mut asset2 = default_asset();
+        asset2.id = String::from("03d424d4-a39c-4180-b697-a333a3772026");
+
+        sel.add_asset(asset1);
+        sel.add_asset(asset2);
+
+        assert_eq!(sel.len(), 2);
+
+        sel.retain(|v| v.id == "d8f91992-7329-4319-a4cb-33025753354a");
+
+        assert_eq!(sel.len(), 1);
+        assert!(sel.contains("d8f91992-7329-4319-a4cb-33025753354a"));
+        assert!(!sel.contains("03d424d4-a39c-4180-b697-a333a3772026"));
     }
 }
