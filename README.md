@@ -97,7 +97,7 @@ immichctl assets list --help
 
 ### Refresh assets selection
 
-Refreshes the metadata of the assets selection. Loads additional metadata like exif metadata.
+Refreshes the metadata of the assets selection.
 Requires one request per assets, i.e. the operation can be slow.
 
 `immichctl assets refresh`

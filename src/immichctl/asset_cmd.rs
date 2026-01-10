@@ -125,6 +125,7 @@ impl ImmichCtl {
         album: &Option<String>,
     ) -> Result<()> {
         let mut search_dto = self.build_search_dto(id, tag, album).await?;
+        search_dto.with_exif = Some(true);
 
         let mut sel = Assets::load(&self.assets_file);
         let old_len = sel.len();
@@ -326,15 +327,9 @@ impl ImmichCtl {
     ) -> Option<chrono::DateTime<FixedOffset>> {
         if let Some(exif_info) = &asset.exif_info
             && let Some(date_time_original) = &exif_info.date_time_original
+            && let Some(tz_str) = &exif_info.time_zone
+            && let Ok(tz) = Self::parse_exif_timezone(tz_str)
         {
-            let tz = if let Some(tz_str) = &exif_info.time_zone {
-                match Self::parse_exif_timezone(tz_str) {
-                    Ok(tz) => tz,
-                    _ => Self::asset_timezone_offset(asset),
-                }
-            } else {
-                Self::asset_timezone_offset(asset)
-            };
             return Some(date_time_original.with_timezone(&tz));
         }
         None
@@ -641,17 +636,16 @@ mod tests {
             "2024-02-01T12:00:00+02:00"
         );
 
-        // Test EXIF columns with missing timezone in EXIF
+        // Test EXIF columns with missing timezone in EXIF -> no exif datetime output
         let asset_with_partial_exif =
             create_asset_with_exif(file_created_at, local_date_time, Some(exif_dt), None);
         assert_eq!(
             ImmichCtl::asset_column(&asset_with_partial_exif, AssetColumns::ExifTimezone),
             ""
         );
-        // Should fall back to asset's main timezone (+02:00)
         assert_eq!(
             ImmichCtl::asset_column(&asset_with_partial_exif, AssetColumns::ExifDateTimeOriginal),
-            "2024-02-01T12:00:00+02:00"
+            ""
         );
 
         // Test EXIF columns with no EXIF data at all
