@@ -124,17 +124,17 @@ impl ImmichCtl {
         tag: &Option<String>,
         album: &Option<String>,
     ) -> Result<()> {
-        let mut body = self.build_search_dto(id, tag, album).await?;
+        let mut search_dto = self.build_search_dto(id, tag, album).await?;
 
         let mut sel = Assets::load(&self.assets_file);
         let old_len = sel.len();
         // TODO map OpenAPI number to i32 (instead of f64)
         let mut page = 1f64;
         while page > 0f64 {
-            body.page = Some(page);
+            search_dto.page = Some(page);
             let mut resp = self
                 .immich()?
-                .search_assets(&body)
+                .search_assets(&search_dto)
                 .await
                 .context("Search failed")?;
             for asset in resp.assets.items.drain(..) {
@@ -164,21 +164,46 @@ impl ImmichCtl {
         tag: &Option<String>,
         album: &Option<String>,
     ) -> Result<()> {
-        let mut body = self.build_search_dto(id, tag, album).await?;
+        let mut assets = Assets::load(&self.assets_file);
+        let old_len = assets.len();
 
-        let mut sel = Assets::load(&self.assets_file);
-        let old_len = sel.len();
+        // check for remove operations that can be handled locally
+        if id.is_some() && tag.is_none() && album.is_none() {
+            let uuid = Uuid::parse_str(id.as_ref().unwrap()).with_context(|| {
+                format!("Invalid asset id '{}', expected uuid", id.as_ref().unwrap())
+            })?;
+            assets.remove_asset(&uuid.to_string());
+        } else {
+            let search_dto = self.build_search_dto(id, tag, album).await?;
+            self.assets_search_remove_by_immich_query(search_dto, &mut assets)
+                .await?;
+        }
+
+        assets.save()?;
+        let new_len = assets.len();
+        println!(
+            "Removed {} asset(s) from selection.",
+            old_len.saturating_sub(new_len)
+        );
+        Ok(())
+    }
+
+    async fn assets_search_remove_by_immich_query(
+        &mut self,
+        mut search_dto: MetadataSearchDto,
+        assets: &mut Assets,
+    ) -> Result<()> {
         // TODO map OpenAPI number to i32 (instead of f64)
         let mut page = 1f64;
         while page > 0f64 {
-            body.page = Some(page);
+            search_dto.page = Some(page);
             let resp = self
                 .immich()?
-                .search_assets(&body)
+                .search_assets(&search_dto)
                 .await
                 .context("Search failed")?;
             for asset in resp.assets.items.iter() {
-                sel.remove_asset(&asset.id);
+                assets.remove_asset(&asset.id);
             }
             match &resp.assets.next_page {
                 Some(next_page) => {
@@ -189,12 +214,6 @@ impl ImmichCtl {
                 None => page = 0f64,
             }
         }
-        sel.save()?;
-        let new_len = sel.len();
-        println!(
-            "Removed {} asset(s) from selection.",
-            old_len.saturating_sub(new_len)
-        );
         Ok(())
     }
 

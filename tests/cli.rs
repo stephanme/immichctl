@@ -442,6 +442,7 @@ fn test_assets_datatime() {
         .arg("--data")
         .arg("{\"dateTimeOriginal\":\"2025-10-07T12:12:05.558+02:00\"}");
     cmd.assert().success();
+    wait_for_running_jobs(homedir.path());
 }
 
 #[test]
@@ -570,4 +571,5 @@ fn test_cleanup() {
         .arg("--data")
         .arg("{\"dateTimeOriginal\":\"2025-10-07T12:12:05.558+02:00\"}");
     cmd.assert().success();
+    wait_for_running_jobs(homedir.path());
 }
