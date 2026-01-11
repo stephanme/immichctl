@@ -36,7 +36,7 @@ impl ImmichCtl {
         let mut sel = Assets::load(&self.assets_file);
         sel.clear();
         sel.save().context("Could not save asset selection")?;
-        println!("Asset selection cleared.");
+        eprintln!("Asset selection cleared.");
         Ok(())
     }
 
@@ -58,7 +58,7 @@ impl ImmichCtl {
             *asset = asset_res.into_inner();
         }
         sel.save()?;
-        println!("Refreshed metadata for {} assets.", sel.len());
+        eprintln!("Refreshed metadata for {} assets.", sel.len());
         Ok(())
     }
 
@@ -152,7 +152,7 @@ impl ImmichCtl {
         }
         sel.save()?;
         let new_len = sel.len();
-        println!(
+        eprintln!(
             "Added {} asset(s) to selection.",
             new_len.saturating_sub(old_len)
         );
@@ -201,7 +201,7 @@ impl ImmichCtl {
 
         assets.save()?;
         let new_len = assets.len();
-        println!(
+        eprintln!(
             "Removed {} asset(s) from selection.",
             old_len.saturating_sub(new_len)
         );
@@ -315,7 +315,7 @@ impl ImmichCtl {
             *asset = asset_res.into_inner();
         }
         if !dry_run {
-            println!("Updated date/time for {} assets.", sel.len());
+            eprintln!("Updated date/time for {} assets.", sel.len());
             sel.save()?;
         }
         Ok(())

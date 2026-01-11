@@ -90,11 +90,10 @@ fn test_version_not_logged_in() {
     cmd.arg("version");
     cmd.assert()
         .success()
-        .stdout(
-            predicate::str::contains("immichctl version:").and(predicate::str::contains(
-                "Not logged in. Cannot determine server version.",
-            )),
-        );
+        .stdout(predicate::str::contains("immichctl version:"))
+        .stderr(predicate::str::contains(
+            "Not logged in. Cannot determine server version.",
+        ));
 }
 
 #[test]
@@ -112,7 +111,7 @@ fn test_login() {
         ));
 
     let assert = login(homedir.path());
-    assert.stdout(predicate::str::contains("Login successful"));
+    assert.stderr(predicate::str::contains("Login successful"));
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("login")
@@ -131,7 +130,7 @@ fn test_logout() {
     cmd.arg("logout");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Logged out."));
+        .stderr(predicate::str::contains("Logged out."));
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("login")
@@ -165,7 +164,7 @@ fn test_assets_search_id() {
     cmd.arg("assets").arg("search").arg("--id").arg(ASSET_UUID);
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 asset(s) to selection."));
+        .stderr(predicate::str::contains("Added 1 asset(s) to selection."));
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("assets").arg("count");
@@ -177,7 +176,7 @@ fn test_assets_search_id() {
         .arg("--remove")
         .arg("--id")
         .arg(ASSET_UUID);
-    cmd.assert().success().stdout(predicate::str::contains(
+    cmd.assert().success().stderr(predicate::str::contains(
         "Removed 1 asset(s) from selection.",
     ));
 
@@ -199,7 +198,7 @@ fn test_assets_search_album() {
         .arg("CF Day EU 2025");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Added 7 asset(s) to selection."));
+        .stderr(predicate::str::contains("Added 7 asset(s) to selection."));
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("assets")
@@ -207,7 +206,7 @@ fn test_assets_search_album() {
         .arg("--remove")
         .arg("--timezone")
         .arg("+00:00");
-    cmd.assert().success().stdout(predicate::str::contains(
+    cmd.assert().success().stderr(predicate::str::contains(
         "Removed 0 asset(s) from selection.",
     ));
     let mut cmd = new_cmd(homedir.path());
@@ -216,7 +215,7 @@ fn test_assets_search_album() {
         .arg("--remove")
         .arg("--timezone")
         .arg("+02:00");
-    cmd.assert().success().stdout(predicate::str::contains(
+    cmd.assert().success().stderr(predicate::str::contains(
         "Removed 7 asset(s) from selection.",
     ));
 }
@@ -234,7 +233,7 @@ fn test_assets_search_remove_by_timezone() {
         .arg("CF Day EU 2025");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Added 7 asset(s) to selection."));
+        .stderr(predicate::str::contains("Added 7 asset(s) to selection."));
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("assets")
@@ -242,7 +241,7 @@ fn test_assets_search_remove_by_timezone() {
         .arg("--remove")
         .arg("--album")
         .arg("CF Day EU 2025");
-    cmd.assert().success().stdout(predicate::str::contains(
+    cmd.assert().success().stderr(predicate::str::contains(
         "Removed 7 asset(s) from selection.",
     ));
 }
@@ -260,7 +259,7 @@ fn test_assets_search_tag() {
         .arg("immichctl/tag1");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Added 2 asset(s) to selection."));
+        .stderr(predicate::str::contains("Added 2 asset(s) to selection."));
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("assets")
@@ -268,7 +267,7 @@ fn test_assets_search_tag() {
         .arg("--remove")
         .arg("--tag")
         .arg("immichctl/tag1");
-    cmd.assert().success().stdout(predicate::str::contains(
+    cmd.assert().success().stderr(predicate::str::contains(
         "Removed 2 asset(s) from selection.",
     ));
 }
@@ -372,7 +371,7 @@ fn test_assets_datatime() {
     cmd.arg("assets").arg("datetime");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Updated date/time for 1 assets."));
+        .stderr(predicate::str::contains("Updated date/time for 1 assets."));
     let mut listcmd = new_cmd(homedir.path());
     listcmd
         .arg("assets")
@@ -392,7 +391,7 @@ fn test_assets_datatime() {
     cmd.arg("assets").arg("datetime").arg("--offset").arg("+1h");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Updated date/time for 1 assets."));
+        .stderr(predicate::str::contains("Updated date/time for 1 assets."));
     // PUT assets returns updated exif metadata but stale asset metadata, asset metadata seems to update by an immich background job (sidecar job)
     listcmd.assert().success().stdout(predicate::str::contains(
         "PXL_20251007_101205558.jpg,2025-10-07T12:12:05.558+02:00,2025-10-07T13:12:05.558+02:00\n",
@@ -413,7 +412,7 @@ fn test_assets_datatime() {
         .arg("+00:00");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Updated date/time for 1 assets."));
+        .stderr(predicate::str::contains("Updated date/time for 1 assets."));
     // PUT assets returns updated exif metadata but stale asset metadata, asset metadata seems to update by an immich background job (metadataExtraction job)
     listcmd.assert().success().stdout(predicate::str::contains(
         "PXL_20251007_101205558.jpg,2025-10-07T13:12:05.558+02:00,2025-10-07T11:12:05.558+00:00\n",
@@ -468,13 +467,13 @@ fn test_tag() {
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("tag").arg("assign").arg("immichctl/test_tag");
-    cmd.assert().success().stdout(predicate::str::contains(
+    cmd.assert().success().stderr(predicate::str::contains(
         "Tagged 2 assets with 'immichctl/test_tag'.",
     ));
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("tag").arg("unassign").arg("immichctl/test_tag");
-    cmd.assert().success().stdout(predicate::str::contains(
+    cmd.assert().success().stderr(predicate::str::contains(
         "Untagged 2 assets from 'immichctl/test_tag'.",
     ));
 }

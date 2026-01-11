@@ -17,7 +17,7 @@ impl ImmichCtl {
                 response.major, response.minor, response.patch
             );
         } else {
-            println!("Not logged in. Cannot determine server version.");
+            eprintln!("Not logged in. Cannot determine server version.");
         }
         Ok(())
     }
@@ -36,7 +36,7 @@ impl ImmichCtl {
         self.config = temp_config;
         self.immich = Ok(immich);
 
-        println!("Login successful to server: {}", server);
+        eprintln!("Login successful to server: {}", server);
         self.config.save()?;
         Ok(())
     }
@@ -50,7 +50,7 @@ impl ImmichCtl {
     pub fn logout(&mut self) -> Result<()> {
         self.config.logout();
         self.config.save()?;
-        println!("Logged out.");
+        eprintln!("Logged out.");
         Ok(())
     }
 }

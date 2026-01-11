@@ -8,7 +8,7 @@ impl ImmichCtl {
     pub async fn tag_assign(&mut self, name: &str) -> Result<()> {
         let sel = Assets::load(&self.assets_file);
         if sel.is_empty() {
-            println!("Selection is empty, nothing to tag.");
+            eprintln!("Selection is empty, nothing to tag.");
             return Ok(());
         }
 
@@ -22,14 +22,14 @@ impl ImmichCtl {
             .bulk_tag_assets(&dto)
             .await
             .context("Could not tag assets")?;
-        println!("Tagged {} assets with '{}'.", tagged_assets.count, name);
+        eprintln!("Tagged {} assets with '{}'.", tagged_assets.count, name);
         Ok(())
     }
 
     pub async fn tag_unassign(&mut self, name: &str) -> Result<()> {
         let sel = Assets::load(&self.assets_file);
         if sel.is_empty() {
-            println!("Selection is empty, nothing to untag.");
+            eprintln!("Selection is empty, nothing to untag.");
             return Ok(());
         }
 
@@ -43,7 +43,7 @@ impl ImmichCtl {
             .await
             .context("Could not untag assets")?;
         let cnt = untag_resp.iter().filter(|r| r.success).count();
-        println!("Untagged {} assets from '{}'.", cnt, name);
+        eprintln!("Untagged {} assets from '{}'.", cnt, name);
         Ok(())
     }
 
