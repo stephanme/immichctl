@@ -96,6 +96,16 @@ impl ImmichCtl {
         }
         Ok(())
     }
+
+    pub fn eprint_progress_indicator(&self, current: usize, total: usize, delta: usize) {
+        if current == 0 || current == total - 1 || current.is_multiple_of(delta) {
+            let percentage = current as f32 / total as f32 * 100.0;
+            eprint!("\r{:.0}%", percentage);
+        }
+        if current == total - 1 {
+            eprintln!();
+        }
+    }
 }
 
 #[cfg(test)]

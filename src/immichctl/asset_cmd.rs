@@ -47,7 +47,12 @@ impl ImmichCtl {
 
     pub async fn assets_refresh(&mut self) -> Result<()> {
         let mut sel = Assets::load(&self.assets_file);
-        for asset in sel.iter_mut_assets() {
+        let total = sel.len();
+        if total == 0 {
+            eprintln!("No assets to refresh.");
+            return Ok(());
+        }
+        for (i, asset) in sel.iter_mut_assets().enumerate() {
             let uuid = Uuid::parse_str(&asset.id)
                 .with_context(|| format!("Invalid asset id '{}', expected uuid", asset.id))?;
             let asset_res = self
@@ -56,6 +61,7 @@ impl ImmichCtl {
                 .await
                 .with_context(|| format!("Could not retrieve asset '{}'", asset.id))?;
             *asset = asset_res.into_inner();
+            self.eprint_progress_indicator(i, total, 50);
         }
         sel.save()?;
         eprintln!("Refreshed metadata for {} assets.", sel.len());
@@ -285,8 +291,9 @@ impl ImmichCtl {
         timezone: &Option<FixedOffset>,
         dry_run: bool,
     ) -> Result<()> {
-        let mut sel = Assets::load(&self.assets_file);
-        for asset in sel.iter_mut_assets() {
+        let mut assets = Assets::load(&self.assets_file);
+        let total = assets.len();
+        for (i, asset) in assets.iter_mut_assets().enumerate() {
             let (old_date_time_original, new_date_time_original) =
                 Self::adjust_date_time_original(asset, offset, timezone);
             if dry_run {
@@ -313,10 +320,11 @@ impl ImmichCtl {
                 .with_context(|| format!("Could not update asset '{}'", asset.id))?;
             // !!! response: file_created_at and local_date_time are not updated, only exif data is updated !!!
             *asset = asset_res.into_inner();
+            self.eprint_progress_indicator(i, total, 50);
         }
         if !dry_run {
-            eprintln!("Updated date/time for {} assets.", sel.len());
-            sel.save()?;
+            eprintln!("Updated date/time for {} assets.", total);
+            assets.save()?;
         }
         Ok(())
     }
