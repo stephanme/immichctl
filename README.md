@@ -9,6 +9,26 @@ Main use cases:
 - check/fix missing tags after image upload caused by [immich-go #990](https://github.com/simulot/immich-go/issues/990) / [immich #16747](https://github.com/immich-app/immich/issues/16747)
 - rename/re-assign tags
 
+Example session that adjusts the timezone of all images tagged by 'myvacation':
+```
+$ immichctl login http://immich --apikey ***
+Login successful to server: http://immich
+
+# ensure that the asset selection is empty
+$ immichctl assets clear
+
+# search for assets tagged by 'myvacation'
+$ immichctl assets search --tag myvacation
+Added 2 asset(s) to selection.
+
+# set timezone to UTC+1
+$ immichctl assets datatime --time-zone +01:00 --dry-run
+PXL_20251007_161236437.jpg: 2025-10-07 18:12:36.437 +02:00 -> 2025-10-07 17:12:36.437 +01:00
+PXL_20251007_183304671.jpg: 2025-10-07 20:33:04.671 +02:00 -> 2025-10-07 19:33:04.671 +01:00
+$ immichctl assets datatime --time-zone +01:00
+Updated date/time for 2 assets.
+```
+
 ## General
 
 `immichctl <subject> <operation/command/verb> <options>`
@@ -57,6 +77,7 @@ The current asset selection is stored in `$HOME/.immchctl/assets.json`.
 ### Search for assets
 
 The assets returned by the Immich search are added to the asset selection.
+If multiple search conditions are specified, all of them must be met.
 
 Single asset by id:<br/>
 `immichctl assets search --id <asset id>`
@@ -66,6 +87,9 @@ Tagged assets:<br/>
 
 Assets of an album:<br/>
 `immichctl assets search --album <album>`
+
+Assets within a date/time range:<br/>
+`immichctl assets search --taken-after 2025-10-07T18:00:00+02:00 --taken-before 2025-10-10T18:00:00+02:00`
 
 ### Remove assets from selection
 

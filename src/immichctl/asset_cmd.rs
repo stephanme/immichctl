@@ -4,7 +4,7 @@ use super::ImmichCtl;
 use super::assets::Assets;
 use super::types::{AlbumResponseDto, AssetResponseDto, MetadataSearchDto, UpdateAssetDto};
 use anyhow::{Context, Result, bail};
-use chrono::{FixedOffset, TimeDelta};
+use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
 use uuid::Uuid;
 
 /// Columns for CSV listing of selected assets
@@ -129,8 +129,12 @@ impl ImmichCtl {
         id: &Option<String>,
         tag: &Option<String>,
         album: &Option<String>,
+        taken_after: &Option<DateTime<FixedOffset>>,
+        taken_before: &Option<DateTime<FixedOffset>>,
     ) -> Result<()> {
-        let mut search_dto = self.build_search_dto(id, tag, album).await?;
+        let mut search_dto = self
+            .build_search_dto(id, tag, album, taken_after,taken_before)
+            .await?;
         search_dto.with_exif = Some(true);
 
         let mut sel = Assets::load(&self.assets_file);
@@ -171,20 +175,22 @@ impl ImmichCtl {
         tag: &Option<String>,
         album: &Option<String>,
         timezone: &Option<FixedOffset>,
+        taken_after: &Option<DateTime<FixedOffset>>,
+        taken_before: &Option<DateTime<FixedOffset>>,
     ) -> Result<()> {
         let mut assets = Assets::load(&self.assets_file);
         let old_len = assets.len();
 
         // check for remove operations that can be handled locally
-        match (id, tag, album, timezone) {
+        match (id, tag, album, timezone, taken_after, taken_before) {
             // remove by id
-            (Some(id), None, None, None) => {
+            (Some(id), None, None, None, None, None) => {
                 let uuid = Uuid::parse_str(id)
                     .with_context(|| format!("Invalid asset id '{}', expected uuid", id))?;
                 assets.remove_asset(&uuid.to_string());
             }
             // remove by timezone
-            (None, None, None, Some(tz)) => {
+            (None, None, None, Some(tz), None, None) => {
                 assets.retain(|asset| {
                     let asset_tz = match ImmichCtl::exif_timezone_offset(asset) {
                         Some(tz) => tz,
@@ -193,13 +199,32 @@ impl ImmichCtl {
                     asset_tz != *tz
                 });
             }
+            (None, None, None, None, Some(taken_after), None) => {
+                assets.retain(|asset| {
+                    let dto = ImmichCtl::get_date_time_original(asset);
+                    dto <= *taken_after
+                });
+            }
+            (None, None, None, None, None, Some(taken_before)) => {
+                assets.retain(|asset| {
+                    let dto = ImmichCtl::get_date_time_original(asset);
+                    dto >= *taken_before
+                });
+            }
+            (None, None, None, None, Some(taken_after), Some(taken_before)) => {
+                assets.retain(|asset| {
+                    let dto = ImmichCtl::get_date_time_original(asset);
+                    !(dto > *taken_after && dto < *taken_before)
+                });
+            }
             _ => {
                 if let Some(_tz) = timezone {
                     bail!(
                         "The --timezone option cannot be used together with other search options."
                     );
                 }
-                let search_dto = self.build_search_dto(id, tag, album).await?;
+                // remove by searching on the server
+                let search_dto = self.build_search_dto(id, tag, album, taken_after, taken_before).await?;
                 self.assets_search_remove_by_immich_query(search_dto, &mut assets)
                     .await?;
             }
@@ -248,6 +273,8 @@ impl ImmichCtl {
         id: &Option<String>,
         tag: &Option<String>,
         album: &Option<String>,
+        taken_after: &Option<DateTime<FixedOffset>>,
+        taken_before: &Option<DateTime<FixedOffset>>,
     ) -> Result<MetadataSearchDto> {
         let mut search_dto = MetadataSearchDto::default();
         if let Some(id) = id {
@@ -270,6 +297,12 @@ impl ImmichCtl {
                     bail!("Album not found: '{}'", album_name);
                 }
             }
+        }
+        if let Some(taken_after) = taken_after {
+            search_dto.taken_after = Some(taken_after.with_timezone(&Utc));
+        }
+        if let Some(taken_before) = taken_before {
+            search_dto.taken_before = Some(taken_before.with_timezone(&Utc));
         }
         // check that at least one search flag is provided
         if search_dto == MetadataSearchDto::default() {
@@ -334,8 +367,7 @@ impl ImmichCtl {
         offset: &TimeDelta,
         new_timezone: &Option<FixedOffset>,
     ) -> (chrono::DateTime<FixedOffset>, chrono::DateTime<FixedOffset>) {
-        let date_time_original = Self::get_exif_date_time_original(asset)
-            .unwrap_or_else(|| Self::get_assert_date_time_original(asset));
+        let date_time_original = Self::get_date_time_original(asset);
 
         let asset_tz = date_time_original.timezone();
         let tz = if let Some(tz) = new_timezone {
@@ -347,6 +379,13 @@ impl ImmichCtl {
         let new_date_time_original = date_time_original + *offset;
         // date_time_original + chrono::Duration::seconds(timezone_offset as i64) + *offset;
         (date_time_original, new_date_time_original.with_timezone(tz))
+    }
+
+    fn get_date_time_original(asset: &AssetResponseDto) -> chrono::DateTime<FixedOffset> {
+        if let Some(date_time_original) = Self::get_exif_date_time_original(asset) {
+            return date_time_original;
+        }
+        Self::get_assert_date_time_original(asset)
     }
 
     fn get_exif_date_time_original(
@@ -765,7 +804,9 @@ mod tests {
         let config_dir = tempfile::tempdir().unwrap();
         let ctl = ImmichCtl::with_config_dir(config_dir.path());
 
-        let result = ctl.build_search_dto(&None, &None, &None).await;
+        let result = ctl
+            .build_search_dto(&None, &None, &None, &None, &None)
+            .await;
 
         assert!(result.is_err());
         assert_eq!(
@@ -784,6 +825,8 @@ mod tests {
                 &Some("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1".to_string()),
                 &None,
                 &None,
+                &None,
+                &None,
             )
             .await;
         assert!(result.is_ok());
@@ -796,7 +839,7 @@ mod tests {
         );
 
         result = ctl
-            .build_search_dto(&Some("no-uuid".to_string()), &None, &None)
+            .build_search_dto(&Some("no-uuid".to_string()), &None, &None, &None, &None)
             .await;
         assert!(result.is_err());
         assert_eq!(
@@ -823,7 +866,7 @@ mod tests {
             .await;
 
         let mut result = ctl
-            .build_search_dto(&None, &Some("tag1".to_string()), &None)
+            .build_search_dto(&None, &Some("tag1".to_string()), &None, &None, &None)
             .await;
         tags_mock.assert_async().await;
         assert!(result.is_ok());
@@ -838,7 +881,7 @@ mod tests {
         );
 
         result = ctl
-            .build_search_dto(&None, &Some("no-tag".to_string()), &None)
+            .build_search_dto(&None, &Some("no-tag".to_string()), &None, &None, &None)
             .await;
         tags_mock.expect(2).assert_async().await;
         assert!(result.is_err());
@@ -866,7 +909,7 @@ mod tests {
             .await;
 
         let mut result = ctl
-            .build_search_dto(&None, &None, &Some("album1".to_string()))
+            .build_search_dto(&None, &None, &Some("album1".to_string()), &None, &None)
             .await;
         albums_mock.assert_async().await;
         assert!(result.is_ok());
@@ -879,7 +922,7 @@ mod tests {
         );
 
         result = ctl
-            .build_search_dto(&None, &None, &Some("no-album".to_string()))
+            .build_search_dto(&None, &None, &Some("no-album".to_string()), &None, &None)
             .await;
         albums_mock.expect(2).assert_async().await;
         assert!(result.is_err());
@@ -888,6 +931,32 @@ mod tests {
             "Album not found: 'no-album'"
         );
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_build_search_dto_with_taken_before_after() {
+        let config_dir = tempfile::tempdir().unwrap();
+        let ctl = ImmichCtl::with_config_dir(config_dir.path());
+
+        let taken_after_str = "2024-07-18T00:00:00+00:00";
+        let taken_before_str = "2024-07-18T23:59:59+00:00";
+        let taken_after = DateTime::parse_from_rfc3339(taken_after_str).ok();
+        let taken_before = DateTime::parse_from_rfc3339(taken_before_str).ok();
+
+        let result = ctl
+            .build_search_dto(&None, &None, &None, &taken_after, &taken_before)
+            .await;
+
+        assert!(result.is_ok());
+        let search_dto = result.unwrap();
+        assert_eq!(
+            search_dto.taken_after,
+            Some(taken_after.unwrap().with_timezone(&Utc))
+        );
+        assert_eq!(
+            search_dto.taken_before,
+            Some(taken_before.unwrap().with_timezone(&Utc))
+        );
     }
 
     #[test]

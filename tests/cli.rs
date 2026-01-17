@@ -274,6 +274,62 @@ fn test_assets_search_tag() {
 
 #[test]
 #[serial]
+fn test_search_by_date() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--taken-after")
+        .arg("2025-10-07T00:00:00+00:00")
+        .arg("--taken-before")
+        .arg("2025-10-07T23:59:59+00:00");
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Added 7 asset(s) to selection."));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--remove")
+        .arg("--taken-after")
+        .arg("2025-10-07T12:00:00+02:00")
+        .arg("--taken-before")
+        .arg("2025-10-07T17:30:00+02:00");
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Removed 2 asset(s) from selection."));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("clear");
+    cmd.assert().success();
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--taken-after")
+        .arg("2025-10-07T12:00:00+02:00")
+        .arg("--taken-before")
+        .arg("2025-10-07T17:30:00+02:00");
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Added 2 asset(s) to selection."));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--remove")
+        .arg("--taken-after")
+        .arg("2025-10-07T10:00:00+00:00");
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Removed 2 asset(s) from selection."));
+}
+
+#[test]
+#[serial]
 fn test_assets_list() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());

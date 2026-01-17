@@ -2,7 +2,7 @@ mod immichctl;
 mod timedelta;
 
 use anyhow::{Result, bail};
-use chrono::{FixedOffset, TimeDelta};
+use chrono::{DateTime, FixedOffset, TimeDelta};
 use clap::{Parser, Subcommand};
 use immichctl::{AssetColumns, CurlMethod, ImmichCtl};
 use timedelta::TimeDeltaValue;
@@ -75,6 +75,12 @@ enum AssetCommands {
         /// Album name to search
         #[arg(long, value_name = "album name")]
         album: Option<String>,
+        /// Assets taken after this date/time
+        #[arg(long, value_name = "YYYY-MM-DDTHH:MM:SS±00:00")]
+        taken_after: Option<DateTime<FixedOffset>>,
+        /// Assets taken before this date/time
+        #[arg(long, value_name = "YYYY-MM-DDTHH:MM:SS±00:00")]
+        taken_before: Option<DateTime<FixedOffset>>,
         /// Timezone (remove only)
         #[arg(long)]
         timezone: Option<FixedOffset>,
@@ -176,11 +182,13 @@ async fn _main(cli: &Cli) -> Result<()> {
                 id,
                 tag,
                 album,
+                taken_after,
+                taken_before,
                 timezone,
             } => {
                 if *remove {
                     immichctl
-                        .assets_search_remove(id, tag, album, timezone)
+                        .assets_search_remove(id, tag, album, timezone, taken_after, taken_before)
                         .await?;
                 } else {
                     if let Some(_tz) = timezone {
@@ -188,7 +196,9 @@ async fn _main(cli: &Cli) -> Result<()> {
                             "The --timezone option can only be used when removing assets from the selection."
                         );
                     }
-                    immichctl.assets_search_add(id, tag, album).await?;
+                    immichctl
+                        .assets_search_add(id, tag, album, taken_after, taken_before)
+                        .await?;
                 }
             }
             AssetCommands::Clear => {
