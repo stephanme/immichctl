@@ -7,7 +7,7 @@ mod tag_cmd;
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
-pub use asset_cmd::AssetColumns;
+pub use asset_cmd::{AssetColumns, AssetSearchArgs};
 pub use curl_cmd::CurlMethod;
 
 use anyhow::{Result, anyhow, bail};

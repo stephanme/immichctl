@@ -297,13 +297,12 @@ fn test_search_by_date() {
         .arg("2025-10-07T12:00:00+02:00")
         .arg("--taken-before")
         .arg("2025-10-07T17:30:00+02:00");
-    cmd.assert()
-        .success()
-        .stderr(predicate::str::contains("Removed 2 asset(s) from selection."));
+    cmd.assert().success().stderr(predicate::str::contains(
+        "Removed 2 asset(s) from selection.",
+    ));
 
     let mut cmd = new_cmd(homedir.path());
-    cmd.arg("assets")
-        .arg("clear");
+    cmd.arg("assets").arg("clear");
     cmd.assert().success();
 
     let mut cmd = new_cmd(homedir.path());
@@ -323,9 +322,56 @@ fn test_search_by_date() {
         .arg("--remove")
         .arg("--taken-after")
         .arg("2025-10-07T10:00:00+00:00");
+    cmd.assert().success().stderr(predicate::str::contains(
+        "Removed 2 asset(s) from selection.",
+    ));
+}
+
+#[test]
+#[serial]
+fn test_assets_search_favorite() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--favorite")
+        .arg("--album")
+        .arg("CF Day EU 2025");
     cmd.assert()
         .success()
-        .stderr(predicate::str::contains("Removed 2 asset(s) from selection."));
+        .stderr(predicate::str::contains("Added 4 asset(s) to selection."));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--remove")
+        .arg("--favorite")
+        .arg("true");
+    cmd.assert().success().stderr(predicate::str::contains(
+        "Removed 4 asset(s) from selection.",
+    ));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--favorite=false")
+        .arg("--album")
+        .arg("CF Day EU 2025");
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Added 3 asset(s) to selection."));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--remove")
+        .arg("--favorite")
+        .arg("false");
+    cmd.assert().success().stderr(predicate::str::contains(
+        "Removed 3 asset(s) from selection.",
+    ));
 }
 
 #[test]

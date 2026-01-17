@@ -88,6 +88,12 @@ Tagged assets:<br/>
 Assets of an album:<br/>
 `immichctl assets search --album <album>`
 
+Favorite assets:<br/>
+`immichctl assets search --favorite`
+
+Non-favorite assets:<br/>
+`immichctl assets search --favorite=false`
+
 Assets within a date/time range:<br/>
 `immichctl assets search --taken-after 2025-10-07T18:00:00+02:00 --taken-before 2025-10-10T18:00:00+02:00`
 

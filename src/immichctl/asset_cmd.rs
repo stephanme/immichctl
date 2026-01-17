@@ -7,6 +7,34 @@ use anyhow::{Context, Result, bail};
 use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
 use uuid::Uuid;
 
+#[derive(clap::Args, Debug, Default)]
+pub struct AssetSearchArgs {
+    /// Remove assets from selection instead of adding
+    #[arg(long)]
+    pub remove: bool,
+    /// Asset id to add (UUID)
+    #[arg(long, value_name = "asset id")]
+    pub id: Option<String>,
+    /// Tag name to search and add by tag id
+    #[arg(long, value_name = "tag name")]
+    pub tag: Option<String>,
+    /// Album name to search
+    #[arg(long, value_name = "album name")]
+    pub album: Option<String>,
+    /// Assets (not) marked as favorite. If used without a value, it's equivalent to `--favorite=true`.
+    #[arg(long, value_name = "true|false", num_args = 0..=1, default_missing_value = "true", action = clap::ArgAction::Set)]
+    pub favorite: Option<bool>,
+    /// Assets taken after this date/time
+    #[arg(long, value_name = "YYYY-MM-DDTHH:MM:SS±00:00")]
+    pub taken_after: Option<DateTime<FixedOffset>>,
+    /// Assets taken before this date/time
+    #[arg(long, value_name = "YYYY-MM-DDTHH:MM:SS±00:00")]
+    pub taken_before: Option<DateTime<FixedOffset>>,
+    /// Timezone (remove only)
+    #[arg(long)]
+    pub timezone: Option<FixedOffset>,
+}
+
 /// Columns for CSV listing of selected assets
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
 pub enum AssetColumns {
@@ -124,17 +152,8 @@ impl ImmichCtl {
         }
     }
 
-    pub async fn assets_search_add(
-        &mut self,
-        id: &Option<String>,
-        tag: &Option<String>,
-        album: &Option<String>,
-        taken_after: &Option<DateTime<FixedOffset>>,
-        taken_before: &Option<DateTime<FixedOffset>>,
-    ) -> Result<()> {
-        let mut search_dto = self
-            .build_search_dto(id, tag, album, taken_after,taken_before)
-            .await?;
+    pub async fn assets_search_add(&mut self, args: &AssetSearchArgs) -> Result<()> {
+        let mut search_dto = self.build_search_dto(args).await?;
         search_dto.with_exif = Some(true);
 
         let mut sel = Assets::load(&self.assets_file);
@@ -169,65 +188,56 @@ impl ImmichCtl {
         Ok(())
     }
 
-    pub async fn assets_search_remove(
-        &mut self,
-        id: &Option<String>,
-        tag: &Option<String>,
-        album: &Option<String>,
-        timezone: &Option<FixedOffset>,
-        taken_after: &Option<DateTime<FixedOffset>>,
-        taken_before: &Option<DateTime<FixedOffset>>,
-    ) -> Result<()> {
+    pub async fn assets_search_remove(&mut self, args: &AssetSearchArgs) -> Result<()> {
         let mut assets = Assets::load(&self.assets_file);
         let old_len = assets.len();
 
-        // check for remove operations that can be handled locally
-        match (id, tag, album, timezone, taken_after, taken_before) {
-            // remove by id
-            (Some(id), None, None, None, None, None) => {
-                let uuid = Uuid::parse_str(id)
-                    .with_context(|| format!("Invalid asset id '{}', expected uuid", id))?;
-                assets.remove_asset(&uuid.to_string());
+        if args.tag.is_some() || args.album.is_some() {
+            // remote search needed if tag or album is specified
+            if args.timezone.is_some() {
+                bail!(
+                    "The --timezone option cannot be used together with other search options when multiple filters are applied."
+                );
             }
-            // remove by timezone
-            (None, None, None, Some(tz), None, None) => {
-                assets.retain(|asset| {
+            let search_dto = self.build_search_dto(args).await?;
+            self.assets_search_remove_by_immich_query(search_dto, &mut assets)
+                .await?;
+        } else {
+            // other args can be handled locally
+            assets.retain(|asset| {
+                let mut retain = false;
+                if let Some(id) = &args.id
+                    && asset.id != *id
+                {
+                    retain = true;
+                }
+                if let Some(favorite) = &args.favorite
+                    && asset.is_favorite != *favorite
+                {
+                    retain = true;
+                }
+                if let Some(taken_after) = &args.taken_after
+                    && ImmichCtl::get_date_time_original(asset) <= *taken_after
+                {
+                    retain = true;
+                }
+                if let Some(taken_before) = &args.taken_before
+                    && ImmichCtl::get_date_time_original(asset) >= *taken_before
+                {
+                    retain = true;
+                }
+                if let Some(tz) = &args.timezone {
                     let asset_tz = match ImmichCtl::exif_timezone_offset(asset) {
                         Some(tz) => tz,
                         None => ImmichCtl::asset_timezone_offset(asset),
                     };
-                    asset_tz != *tz
-                });
-            }
-            (None, None, None, None, Some(taken_after), None) => {
-                assets.retain(|asset| {
-                    let dto = ImmichCtl::get_date_time_original(asset);
-                    dto <= *taken_after
-                });
-            }
-            (None, None, None, None, None, Some(taken_before)) => {
-                assets.retain(|asset| {
-                    let dto = ImmichCtl::get_date_time_original(asset);
-                    dto >= *taken_before
-                });
-            }
-            (None, None, None, None, Some(taken_after), Some(taken_before)) => {
-                assets.retain(|asset| {
-                    let dto = ImmichCtl::get_date_time_original(asset);
-                    !(dto > *taken_after && dto < *taken_before)
-                });
-            }
-            _ => {
-                if let Some(_tz) = timezone {
-                    bail!(
-                        "The --timezone option cannot be used together with other search options."
-                    );
+                    if asset_tz != *tz {
+                        retain = true;
+                    }
                 }
-                // remove by searching on the server
-                let search_dto = self.build_search_dto(id, tag, album, taken_after, taken_before).await?;
-                self.assets_search_remove_by_immich_query(search_dto, &mut assets)
-                    .await?;
-            }
+
+                retain
+            });
         }
 
         assets.save()?;
@@ -268,23 +278,16 @@ impl ImmichCtl {
         Ok(())
     }
 
-    async fn build_search_dto(
-        &self,
-        id: &Option<String>,
-        tag: &Option<String>,
-        album: &Option<String>,
-        taken_after: &Option<DateTime<FixedOffset>>,
-        taken_before: &Option<DateTime<FixedOffset>>,
-    ) -> Result<MetadataSearchDto> {
+    async fn build_search_dto(&self, args: &AssetSearchArgs) -> Result<MetadataSearchDto> {
         let mut search_dto = MetadataSearchDto::default();
-        if let Some(id) = id {
+        if let Some(id) = &args.id {
             let uuid = uuid::Uuid::parse_str(id).context("Invalid asset id, expected uuid")?;
             search_dto.id = Some(uuid);
         }
-        if let Some(tag_name) = tag {
+        if let Some(tag_name) = &args.tag {
             search_dto.tag_ids = Some(vec![self.find_tag_by_name(tag_name).await?]);
         }
-        if let Some(album_name) = album {
+        if let Some(album_name) = &args.album {
             let albums_resp = self
                 .immich()?
                 .get_all_albums(None, None)
@@ -298,10 +301,13 @@ impl ImmichCtl {
                 }
             }
         }
-        if let Some(taken_after) = taken_after {
+        if let Some(favorite) = args.favorite {
+            search_dto.is_favorite = Some(favorite);
+        }
+        if let Some(taken_after) = args.taken_after {
             search_dto.taken_after = Some(taken_after.with_timezone(&Utc));
         }
-        if let Some(taken_before) = taken_before {
+        if let Some(taken_before) = args.taken_before {
             search_dto.taken_before = Some(taken_before.with_timezone(&Utc));
         }
         // check that at least one search flag is provided
@@ -804,9 +810,7 @@ mod tests {
         let config_dir = tempfile::tempdir().unwrap();
         let ctl = ImmichCtl::with_config_dir(config_dir.path());
 
-        let result = ctl
-            .build_search_dto(&None, &None, &None, &None, &None)
-            .await;
+        let result = ctl.build_search_dto(&AssetSearchArgs::default()).await;
 
         assert!(result.is_err());
         assert_eq!(
@@ -820,15 +824,11 @@ mod tests {
         let config_dir = tempfile::tempdir().unwrap();
         let ctl = ImmichCtl::with_config_dir(config_dir.path());
 
-        let mut result = ctl
-            .build_search_dto(
-                &Some("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1".to_string()),
-                &None,
-                &None,
-                &None,
-                &None,
-            )
-            .await;
+        let args = AssetSearchArgs {
+            id: Some("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1".to_string()),
+            ..Default::default()
+        };
+        let mut result = ctl.build_search_dto(&args).await;
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
@@ -838,9 +838,11 @@ mod tests {
             }
         );
 
-        result = ctl
-            .build_search_dto(&Some("no-uuid".to_string()), &None, &None, &None, &None)
-            .await;
+        let args = AssetSearchArgs {
+            id: Some("no-uuid".to_string()),
+            ..Default::default()
+        };
+        result = ctl.build_search_dto(&args).await;
         assert!(result.is_err());
         assert_eq!(
             result.err().unwrap().to_string(),
@@ -865,9 +867,11 @@ mod tests {
             .create_async()
             .await;
 
-        let mut result = ctl
-            .build_search_dto(&None, &Some("tag1".to_string()), &None, &None, &None)
-            .await;
+        let args = AssetSearchArgs {
+            tag: Some("tag1".to_string()),
+            ..Default::default()
+        };
+        let mut result = ctl.build_search_dto(&args).await;
         tags_mock.assert_async().await;
         assert!(result.is_ok());
         assert_eq!(
@@ -880,9 +884,11 @@ mod tests {
             }
         );
 
-        result = ctl
-            .build_search_dto(&None, &Some("no-tag".to_string()), &None, &None, &None)
-            .await;
+        let args = AssetSearchArgs {
+            tag: Some("no-tag".to_string()),
+            ..Default::default()
+        };
+        result = ctl.build_search_dto(&args).await;
         tags_mock.expect(2).assert_async().await;
         assert!(result.is_err());
         assert_eq!(
@@ -908,9 +914,11 @@ mod tests {
             .create_async()
             .await;
 
-        let mut result = ctl
-            .build_search_dto(&None, &None, &Some("album1".to_string()), &None, &None)
-            .await;
+        let args = AssetSearchArgs {
+            album: Some("album1".to_string()),
+            ..Default::default()
+        };
+        let mut result = ctl.build_search_dto(&args).await;
         albums_mock.assert_async().await;
         assert!(result.is_ok());
         assert_eq!(
@@ -921,9 +929,11 @@ mod tests {
             }
         );
 
-        result = ctl
-            .build_search_dto(&None, &None, &Some("no-album".to_string()), &None, &None)
-            .await;
+        let args = AssetSearchArgs {
+            album: Some("no-album".to_string()),
+            ..Default::default()
+        };
+        result = ctl.build_search_dto(&args).await;
         albums_mock.expect(2).assert_async().await;
         assert!(result.is_err());
         assert_eq!(
@@ -931,6 +941,22 @@ mod tests {
             "Album not found: 'no-album'"
         );
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_build_search_dto_with_favorite() {
+        let config_dir = tempfile::tempdir().unwrap();
+        let ctl = ImmichCtl::with_config_dir(config_dir.path());
+
+        let args = AssetSearchArgs {
+            favorite: Some(true),
+            ..Default::default()
+        };
+        let result = ctl.build_search_dto(&args).await;
+
+        assert!(result.is_ok());
+        let search_dto = result.unwrap();
+        assert_eq!(search_dto.is_favorite, Some(true));
     }
 
     #[tokio::test]
@@ -943,9 +969,12 @@ mod tests {
         let taken_after = DateTime::parse_from_rfc3339(taken_after_str).ok();
         let taken_before = DateTime::parse_from_rfc3339(taken_before_str).ok();
 
-        let result = ctl
-            .build_search_dto(&None, &None, &None, &taken_after, &taken_before)
-            .await;
+        let args = AssetSearchArgs {
+            taken_after,
+            taken_before,
+            ..Default::default()
+        };
+        let result = ctl.build_search_dto(&args).await;
 
         assert!(result.is_ok());
         let search_dto = result.unwrap();
