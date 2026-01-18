@@ -1073,4 +1073,96 @@ mod tests {
         let result = ImmichCtl::adjust_date_time_original(&asset, &offset, &new_timezone);
         assert_eq!(result.1.to_rfc3339(), "2024-01-01T06:30:00-04:00");
     }
+
+    #[tokio::test]
+    async fn test_assets_search_remove_by_id() {
+        let config_dir = tempfile::tempdir().unwrap();
+        let mut ctl = ImmichCtl::with_config_dir(config_dir.path());
+
+        let asset1 = create_asset_with_timestamps(
+            Utc.with_ymd_and_hms(2024, 1, 1, 10, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap(),
+        );
+        let asset2 = create_asset_with_timestamps(
+            Utc.with_ymd_and_hms(2024, 1, 2, 10, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2024, 1, 2, 12, 0, 0).unwrap(),
+        );
+        let asset_to_remove_id = asset1.id.clone();
+
+        let mut assets = Assets::load(&ctl.assets_file);
+        assets.add_asset(asset1);
+        assets.add_asset(asset2);
+        assets.save().unwrap();
+
+        let args = AssetSearchArgs {
+            id: Some(asset_to_remove_id.clone()),
+            ..Default::default()
+        };
+
+        let result = ctl.assets_search_remove(&args).await;
+        assert!(result.is_ok());
+
+        let assets_after_remove = Assets::load(&ctl.assets_file);
+        assert_eq!(assets_after_remove.len(), 1);
+        assert!(
+            assets_after_remove
+                .iter_assets()
+                .all(|a| a.id != asset_to_remove_id)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_assets_search_remove_by_taken_after_and_before() {
+        let config_dir = tempfile::tempdir().unwrap();
+        let mut ctl = ImmichCtl::with_config_dir(config_dir.path());
+
+        let asset1 = create_asset_with_timestamps(
+            Utc.with_ymd_and_hms(2024, 1, 1, 10, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2024, 1, 1, 10, 0, 0).unwrap(),
+        );
+
+        let asset2_ts = Utc.with_ymd_and_hms(2024, 1, 2, 10, 0, 0).unwrap();
+        let asset2 = create_asset_with_timestamps(asset2_ts, asset2_ts);
+
+        let asset3 = create_asset_with_timestamps(
+            Utc.with_ymd_and_hms(2024, 1, 3, 10, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2024, 1, 3, 10, 0, 0).unwrap(),
+        );
+
+        let mut assets = Assets::load(&ctl.assets_file);
+        assets.add_asset(asset1.clone());
+        assets.add_asset(asset2.clone());
+        assets.add_asset(asset3.clone());
+        assets.save().unwrap();
+
+        let args = AssetSearchArgs {
+            taken_after: Some(Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap().into()),
+            taken_before: Some(Utc.with_ymd_and_hms(2024, 1, 2, 12, 0, 0).unwrap().into()),
+            ..Default::default()
+        };
+
+        let result = ctl.assets_search_remove(&args).await;
+        assert!(result.is_ok());
+
+        let assets_after_remove = Assets::load(&ctl.assets_file);
+        assert_eq!(assets_after_remove.len(), 2);
+        let remaining_ids: Vec<_> = assets_after_remove.iter_assets().map(|a| &a.id).collect();
+        assert!(remaining_ids.contains(&&asset1.id));
+        assert!(remaining_ids.contains(&&asset3.id));
+    }
+
+    #[tokio::test]
+    async fn test_assets_search_remove_bad_params() {
+        let config_dir = tempfile::tempdir().unwrap();
+        let mut ctl = ImmichCtl::with_config_dir(config_dir.path());
+
+        let args = AssetSearchArgs {
+            tag: Some("tag1".to_string()),
+            timezone: Some(FixedOffset::east_opt(2 * 3600).unwrap()),
+            ..Default::default()
+        };
+
+        let result = ctl.assets_search_remove(&args);
+        assert!(result.await.is_err());
+    }
 }
