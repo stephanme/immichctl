@@ -1,6 +1,6 @@
 use super::ImmichCtl;
 use super::assets::Assets;
-use super::types::{BulkIdsDto, TagBulkAssetsDto, TagResponseDto};
+use super::types::{BulkIdsDto, TagResponseDto};
 use anyhow::{Context, Result, bail};
 use uuid::Uuid;
 
@@ -13,16 +13,16 @@ impl ImmichCtl {
         }
 
         let tag_id = self.find_tag_by_name(name).await?;
-        let dto = TagBulkAssetsDto {
-            asset_ids: sel.asset_uuids(),
-            tag_ids: vec![tag_id],
+        let dto = BulkIdsDto {
+            ids: sel.asset_uuids(),
         };
-        let tagged_assets = self
+        let tag_resp = self
             .immich()?
-            .bulk_tag_assets(&dto)
+            .tag_assets(&tag_id, &dto)
             .await
             .context("Could not tag assets")?;
-        eprintln!("Tagged {} assets with '{}'.", tagged_assets.count, name);
+        let cnt = tag_resp.iter().filter(|r| r.success).count();
+        eprintln!("Tagged {} assets with '{}'.", cnt, name);
         Ok(())
     }
 
@@ -78,7 +78,7 @@ impl ImmichCtl {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use chrono::DateTime;
 

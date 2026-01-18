@@ -1,3 +1,4 @@
+mod album_cmd;
 mod asset_cmd;
 mod assets;
 mod config;

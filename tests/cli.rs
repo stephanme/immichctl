@@ -15,6 +15,7 @@ use std::{env, path::Path};
     - An album named "CF Day EU 2025" containing 7 assets (not modified by tests).
     - A tag named "immichctl/tag1" assigned to 2 assets (not modified by tests).
     - A tag named "immichctl/test_tag" with no assets assigned (modified by tests).
+    - An empty album named "immichctl_test_album" that is modified by tests.
     - An asset with ASSET_UUID exists on the server.
 
     Tests are supposed to cleanup after running, i.e. all resources on the server are as described above.
@@ -582,6 +583,46 @@ fn test_tag() {
 
 #[test]
 #[serial]
+fn test_album() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    // check that immchctl_test_album is not used
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--album")
+        .arg("immichctl_test_album");
+    cmd.assert().success();
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("count");
+    cmd.assert().success().stdout(predicate::eq("0\n"));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--tag")
+        .arg("immichctl/tag1");
+    cmd.assert().success();
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("count");
+    cmd.assert().success().stdout(predicate::eq("2\n"));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("album").arg("assign").arg("immichctl_test_album");
+    cmd.assert().success().stderr(predicate::str::contains(
+        "Assigned 2 assets to album 'immichctl_test_album'.",
+    ));
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("album").arg("unassign").arg("immichctl_test_album");
+    cmd.assert().success().stderr(predicate::str::contains(
+        "Unassigned 2 assets from album 'immichctl_test_album'.",
+    ));
+}
+
+#[test]
+#[serial]
 fn test_curl() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());
@@ -655,6 +696,20 @@ fn test_cleanup() {
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("tag").arg("unassign").arg("immichctl/test_tag");
+    cmd.assert().success();
+
+    // check that immchctl_test_album is not used
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("clear");
+    cmd.assert().success();
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("search")
+        .arg("--album")
+        .arg("immichctl_test_album");
+    cmd.assert().success();
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("album").arg("unassign").arg("immichctl_test_album");
     cmd.assert().success();
 
     // reset datetime of ASSET_UUID

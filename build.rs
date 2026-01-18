@@ -28,11 +28,11 @@ fn main() {
         ("/server/version", vec![Method::Get]),
         ("/auth/validateToken", vec![Method::Post]),
         ("/search/metadata", vec![Method::Post]),
-        ("/tags", vec![Method::Get]),
-        ("/tags/assets", vec![Method::Put]),
-        ("/tags/{id}/assets", vec![Method::Delete]),
-        ("/albums", vec![Method::Get]),
         ("/assets/{id}", vec![Method::Get, Method::Put]),
+        ("/tags", vec![Method::Get]),
+        ("/tags/{id}/assets", vec![Method::Put, Method::Delete]),
+        ("/albums", vec![Method::Get]),
+        ("/albums/{id}/assets", vec![Method::Put, Method::Delete]),
     ]);
 
     // Retain only paths that have at least one allowed operation.

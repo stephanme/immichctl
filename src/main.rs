@@ -38,11 +38,17 @@ enum Commands {
         #[command(subcommand)]
         command: AssetCommands,
     },
-    /// Tag selected assets
+    /// Manage tags
     #[command(visible_aliases = ["tag", "t"])]
     Tags {
         #[command(subcommand)]
         command: TagCommands,
+    },
+    /// Manage albums
+    #[command(visible_aliases = ["album"])]
+    Albums {
+        #[command(subcommand)]
+        command: AlbumCommands,
     },
     /// Execute an Immich API request
     Curl {
@@ -115,6 +121,20 @@ enum TagCommands {
     /// Unassign a tag from selected assets
     Unassign {
         /// Tag name to remove
+        name: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AlbumCommands {
+    /// Assign selected assets to an album
+    Assign {
+        /// Album name to assign
+        name: String,
+    },
+    /// Unassign selected assets from an album
+    Unassign {
+        /// Album name to remove
         name: String,
     },
 }
@@ -202,6 +222,14 @@ async fn _main(cli: &Cli) -> Result<()> {
             }
             TagCommands::Unassign { name } => {
                 immichctl.tag_unassign(name).await?;
+            }
+        },
+        Commands::Albums { command } => match command {
+            AlbumCommands::Assign { name } => {
+                immichctl.album_assign(name).await?;
+            }
+            AlbumCommands::Unassign { name } => {
+                immichctl.album_unassign(name).await?;
             }
         },
     }

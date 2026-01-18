@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use super::ImmichCtl;
 use super::assets::Assets;
-use super::types::{AlbumResponseDto, AssetResponseDto, MetadataSearchDto, UpdateAssetDto};
+use super::types::{AssetResponseDto, MetadataSearchDto, UpdateAssetDto};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
 use uuid::Uuid;
@@ -288,18 +288,8 @@ impl ImmichCtl {
             search_dto.tag_ids = Some(vec![self.find_tag_by_name(tag_name).await?]);
         }
         if let Some(album_name) = &args.album {
-            let albums_resp = self
-                .immich()?
-                .get_all_albums(None, None)
-                .await
-                .context("Could not retrieve albums")?;
-            let album_id = Self::find_album_by_name(album_name, &albums_resp);
-            match album_id {
-                Some(uuid) => search_dto.album_ids.push(uuid),
-                None => {
-                    bail!("Album not found: '{}'", album_name);
-                }
-            }
+            let album_id = self.find_album_by_name(album_name).await?;
+            search_dto.album_ids.push(album_id);
         }
         if let Some(favorite) = args.favorite {
             search_dto.is_favorite = Some(favorite);
@@ -315,13 +305,6 @@ impl ImmichCtl {
             bail!("Please provide at least one search flag.");
         }
         Ok(search_dto)
-    }
-
-    fn find_album_by_name(name: &str, albums: &[AlbumResponseDto]) -> Option<Uuid> {
-        albums
-            .iter()
-            .find(|a| a.album_name == name)
-            .and_then(|found_album| Uuid::parse_str(&found_album.id).ok())
     }
 
     pub async fn assets_datetime_adjust(
@@ -490,31 +473,14 @@ impl ImmichCtl {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
+    use crate::immichctl::album_cmd::tests::create_album;
+    use crate::immichctl::tag_cmd::tests::create_tag;
     use crate::immichctl::tests::create_immichctl_with_server;
-    use crate::immichctl::types::{
-        AssetTypeEnum, AssetVisibility, ExifResponseDto, TagResponseDto, UserAvatarColor,
-        UserResponseDto,
-    };
+    use crate::immichctl::types::{AssetTypeEnum, AssetVisibility, ExifResponseDto};
 
     use super::*;
     use chrono::{DateTime, TimeZone, Utc};
-
-    pub fn create_tag(id: &str, value: &str, parent_id: Option<&str>) -> TagResponseDto {
-        let timestamp = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
-            .unwrap()
-            .with_timezone(&chrono::Utc);
-        let name = value.split('/').last().unwrap_or(value);
-        TagResponseDto {
-            id: id.to_string(),
-            name: name.to_string(),
-            value: value.to_string(),
-            parent_id: parent_id.map(|s| s.to_string()),
-            created_at: timestamp,
-            updated_at: timestamp,
-            color: None,
-        }
-    }
 
     fn create_asset_with_timestamps(
         file_created_at: DateTime<Utc>,
@@ -573,40 +539,6 @@ mod tests {
             ..Default::default()
         });
         asset
-    }
-
-    fn create_album(id: &str, name: &str) -> AlbumResponseDto {
-        let timestamp = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
-            .unwrap()
-            .with_timezone(&chrono::Utc);
-        AlbumResponseDto {
-            id: id.to_string(),
-            album_name: name.to_string(),
-            owner_id: Uuid::new_v4().to_string(),
-            created_at: timestamp,
-            updated_at: timestamp,
-            asset_count: 1,
-            album_thumbnail_asset_id: None,
-            shared: false,
-            assets: vec![],
-            owner: UserResponseDto {
-                id: Uuid::new_v4().to_string(),
-                email: "test@test.com".to_string(),
-                name: "Test User".to_string(),
-                avatar_color: UserAvatarColor::Blue,
-                profile_image_path: "".to_string(),
-                profile_changed_at: timestamp,
-            },
-            start_date: None,
-            end_date: None,
-            has_shared_link: false,
-            album_users: vec![],
-            contributor_counts: vec![],
-            description: "".to_string(),
-            is_activity_enabled: false,
-            last_modified_asset_timestamp: None,
-            order: None,
-        }
     }
 
     #[tokio::test]
@@ -776,33 +708,6 @@ mod tests {
         );
         assert!(ImmichCtl::parse_exif_timezone("invalid").is_err());
         assert!(ImmichCtl::parse_exif_timezone("").is_err());
-    }
-
-    #[test]
-    fn test_find_album_by_name() {
-        let albums = vec![
-            create_album("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1", "Album 1"),
-            create_album("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab2", "Album 2"),
-            create_album("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab3", "Another Album"),
-        ];
-
-        // Find an existing album
-        assert_eq!(
-            ImmichCtl::find_album_by_name("Album 2", &albums),
-            Uuid::parse_str("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab2").ok()
-        );
-
-        // Album not found
-        assert_eq!(
-            ImmichCtl::find_album_by_name("Nonexistent Album", &albums),
-            None
-        );
-
-        // Find another existing album
-        assert_eq!(
-            ImmichCtl::find_album_by_name("Album 1", &albums),
-            Uuid::parse_str("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1").ok()
-        );
     }
 
     #[tokio::test]

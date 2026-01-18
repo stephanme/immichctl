@@ -163,3 +163,15 @@ Tags can be specified with full hierarchical name (e.g. `parent/child`) or with 
 ### Unassing tag from assets
 
 `immichctl tag unassign <tag name>`
+
+## Album Commands
+
+Assets can be assigned/unassigned to albums.
+
+### Assign assets to album
+
+`immichctl album assign <album name>`
+
+### Unassing assets from album
+
+`immichctl album unassign <album name>`
