@@ -5,7 +5,8 @@ use super::ImmichCtl;
 impl ImmichCtl {
     pub async fn version(&self) -> Result<()> {
         let version = env!("CARGO_PKG_VERSION");
-        println!("immichctl version: {}", version);
+        let git_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
+        println!("immichctl version: {} ({})", version, git_sha);
         if self.config.logged_in() {
             let response = self
                 .immich()?

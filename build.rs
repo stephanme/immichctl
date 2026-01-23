@@ -1,5 +1,6 @@
 use openapiv3::ReferenceOr;
 use std::collections::HashMap;
+use vergen_git2::{BuildBuilder, Emitter, Git2Builder};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Method {
@@ -13,7 +14,14 @@ enum Method {
     // Trace,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let build = BuildBuilder::all_build()?;
+    let git2 = Git2Builder::all_git()?;
+    Emitter::default()
+        .add_instructions(&build)?
+        .add_instructions(&git2)?
+        .emit()?;
+
     // Source OpenAPI spec
     let src = "./immich-openapi-specs.json";
     println!("cargo:rerun-if-changed={}", src);
@@ -88,6 +96,8 @@ fn main() {
         serde_json::to_string_pretty(&spec).expect("failed to serialize filtered spec"),
     )
     .expect("failed to write filtered spec");
+
+    Ok(())
 }
 
 /// Recursively mark-and-sweep all OpenAPI components (schemas, parameters, requestBodies, responses, headers)
