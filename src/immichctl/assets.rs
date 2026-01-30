@@ -124,6 +124,7 @@ mod tests {
             is_favorite: false,
             is_offline: false,
             is_trashed: false,
+            is_edited: false,
             local_date_time: DateTime::<Utc>::from_timestamp_nanos(0),
             original_file_name: String::from("file.jpg"),
             original_path: String::from("/tmp/file.jpg"),
@@ -145,6 +146,8 @@ mod tests {
             stack: None,
             tags: vec![],
             unassigned_faces: vec![],
+            height: None,
+            width: None,
         }
     }
 

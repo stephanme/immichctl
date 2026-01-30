@@ -523,6 +523,9 @@ pub mod tests {
             thumbhash: None,
             unassigned_faces: vec![],
             visibility: AssetVisibility::Timeline,
+            height: None,
+            width: None,
+            is_edited: false,
         }
     }
 
