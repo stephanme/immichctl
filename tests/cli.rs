@@ -427,6 +427,7 @@ fn test_assets_list() {
 fn test_assets_datatime_dryrun() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());
+    reset_datetime_original(homedir.path());
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("assets").arg("search").arg("--id").arg(ASSET_UUID);
@@ -464,6 +465,7 @@ fn test_assets_datatime_dryrun() {
 fn test_assets_datatime() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());
+    reset_datetime_original(homedir.path());
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("assets").arg("search").arg("--id").arg(ASSET_UUID);
@@ -495,19 +497,61 @@ fn test_assets_datatime() {
     cmd.assert()
         .success()
         .stderr(predicate::str::contains("Updated date/time for 1 assets."));
-    // PUT assets returns updated exif metadata but stale asset metadata, asset metadata seems to update by an immich background job (sidecar job)
-    listcmd.assert().success().stdout(predicate::str::contains(
+    // PUT assets returns updated exif metadata but stale asset metadata, asset metadata seems to be updated by metadataExtraction job
+    listcmd.assert().append_context("cmd", "--offset +1h").append_context("refresh", "before").success().stdout(predicate::str::contains(
         "PXL_20251007_101205558.jpg,2025-10-07T12:12:05.558+02:00,2025-10-07T13:12:05.558+02:00\n",
     ));
     wait_for_running_jobs(homedir.path());
     let mut refreshcmd = new_cmd(homedir.path());
     refreshcmd.arg("assets").arg("refresh");
     refreshcmd.assert().success();
-    listcmd.assert().success().stdout(predicate::str::contains(
+    listcmd.assert().append_context("cmd", "--offset +1h").append_context("refresh", "after").success().stdout(predicate::str::contains(
         "PXL_20251007_101205558.jpg,2025-10-07T13:12:05.558+02:00,2025-10-07T13:12:05.558+02:00\n",
     ));
 
-    // timezone
+    // offset +1h, timezone +01:00
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("datetime")
+        .arg("--offset")
+        .arg("+1h")
+        .arg("--timezone")
+        .arg("+01:00");
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Updated date/time for 1 assets."));
+    // PUT assets returns updated exif metadata but stale asset metadata, asset metadata seems to be updated by metadataExtraction job
+    listcmd.assert().append_context("cmd", "--offset +1h --timezone +01:00").append_context("refresh", "before").success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T13:12:05.558+02:00,2025-10-07T13:12:05.558+01:00\n",
+    ));
+    wait_for_running_jobs(homedir.path());
+    let mut refreshcmd = new_cmd(homedir.path());
+    refreshcmd.arg("assets").arg("refresh");
+    refreshcmd.assert().success();
+    listcmd.assert().append_context("cmd", "--offset +1h --timezone +01:00").append_context("refresh", "after").success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T13:12:05.558+01:00,2025-10-07T13:12:05.558+01:00\n",
+    ));
+
+    // timezone +03:00
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("datetime")
+        .arg("--timezone")
+        .arg("+03:00");
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Updated date/time for 1 assets."));
+    // PUT assets returns updated exif metadata but stale asset metadata, asset metadata seems to be updated by metadataExtraction job
+    listcmd.assert().append_context("cmd", "--timezone +03:00").append_context("refresh", "before").success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T13:12:05.558+01:00,2025-10-07T15:12:05.558+03:00\n",
+    ));
+    wait_for_running_jobs(homedir.path());
+    refreshcmd.assert().success();
+    listcmd.assert().append_context("cmd", "--timezone +03:00").append_context("refresh", "after").success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T15:12:05.558+03:00,2025-10-07T15:12:05.558+03:00\n",
+    ));
+
+    // timezone +00:00 - BROKEN
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("assets")
         .arg("datetime")
@@ -516,29 +560,22 @@ fn test_assets_datatime() {
     cmd.assert()
         .success()
         .stderr(predicate::str::contains("Updated date/time for 1 assets."));
-    // PUT assets returns updated exif metadata but stale asset metadata, asset metadata seems to update by an immich background job (metadataExtraction job)
-    listcmd.assert().success().stdout(predicate::str::contains(
-        "PXL_20251007_101205558.jpg,2025-10-07T13:12:05.558+02:00,2025-10-07T11:12:05.558+00:00\n",
+    // PUT assets returns updated exif metadata but stale asset metadata, asset metadata seems to be updated by metadataExtraction job
+    listcmd.assert().append_context("cmd", "--timezone +00:00").append_context("refresh", "before").success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T15:12:05.558+03:00,2025-10-07T12:12:05.558+00:00\n",
     ));
     wait_for_running_jobs(homedir.path());
     refreshcmd.assert().success();
-    // TODO: bug in immich server v2.4.1: after timezone change w/o dateTimeOriginal change the asset localDateTime is not updated, only exif-datetime is updated
+    // Bug in immich server 2.5.5: timezone is set to original timezone of +02:00 instead of +00:00 (seems that TZ is derived from other timestamps)
+    // might be related: https://github.com/immich-app/immich/pull/25889
     // Expected:
-    //  "PXL_20251007_101205558.jpg,2025-10-07T11:12:05.558+00:00,2025-10-07T11:12:05.558+00:00\n",
-    listcmd.assert().success().stdout(predicate::str::contains(
-        "PXL_20251007_101205558.jpg,2025-10-07T13:12:05.558+02:00,2025-10-07T11:12:05.558+00:00\n",
+    //  "PXL_20251007_101205558.jpg,2025-10-07T12:12:05.558+00:00,2025-10-07T12:12:05.558+00:00\n",
+    listcmd.assert().append_context("cmd", "--timezone +00:00").append_context("refresh", "after").success().stdout(predicate::str::contains(
+        "PXL_20251007_101205558.jpg,2025-10-07T14:12:05.558+02:00,2025-10-07T14:12:05.558+02:00\n",
     ));
 
     // reset datetime of ASSET_UUID
-    let mut cmd = new_cmd(homedir.path());
-    cmd.arg("curl")
-        .arg("--method")
-        .arg("put")
-        .arg("assets/".to_owned() + ASSET_UUID)
-        .arg("--data")
-        .arg("{\"dateTimeOriginal\":\"2025-10-07T12:12:05.558+02:00\"}");
-    cmd.assert().success();
-    wait_for_running_jobs(homedir.path());
+    reset_datetime_original(homedir.path());
 }
 
 #[test]
@@ -712,8 +749,11 @@ fn test_cleanup() {
     cmd.arg("album").arg("unassign").arg("immichctl_test_album");
     cmd.assert().success();
 
-    // reset datetime of ASSET_UUID
-    let mut cmd = new_cmd(homedir.path());
+    reset_datetime_original(homedir.path());
+}
+
+fn reset_datetime_original(homedir: &Path) {
+    let mut cmd = new_cmd(homedir);
     cmd.arg("curl")
         .arg("--method")
         .arg("put")
@@ -721,5 +761,5 @@ fn test_cleanup() {
         .arg("--data")
         .arg("{\"dateTimeOriginal\":\"2025-10-07T12:12:05.558+02:00\"}");
     cmd.assert().success();
-    wait_for_running_jobs(homedir.path());
+    wait_for_running_jobs(homedir);
 }
