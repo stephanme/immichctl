@@ -153,10 +153,15 @@ Adjust timestamp by an offset (e.g. -1d2h30m):<br/>
 
 ## Tag Commands
 
-Tags can be assigned/unassigned to the selected assets. Tags are not created or deleted, i.e. the tag must already exist before it can be added.
 Tags can be specified with full hierarchical name (e.g. `parent/child`) or with just the tag name (`child`) if the name is unambiguous.
 
+### List tags
+
+`immichctl tags list`
+
 ### Assign tag to assets
+
+Tags can be assigned to the selected assets. The tag must already exist before it can be assigned.
 
 `immichctl tag assign <tag name>`
 
