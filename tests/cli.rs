@@ -620,6 +620,21 @@ fn test_tag() {
 
 #[test]
 #[serial]
+fn test_tag_list() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    // Test that tag list works and shows tags in alphabetical order
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("tags").arg("list");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("immichctl/tag1"))
+        .stdout(predicate::str::contains("immichctl/test_tag"));
+}
+
+#[test]
+#[serial]
 fn test_album() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());

@@ -75,6 +75,20 @@ impl ImmichCtl {
 
         None
     }
+
+    pub async fn tag_list(&self) -> Result<()> {
+        let tags_resp = self
+            .immich()?
+            .get_all_tags()
+            .await
+            .context("Could not retrieve tags")?;
+        let mut tags: Vec<&TagResponseDto> = tags_resp.iter().collect();
+        tags.sort_by(|a, b| a.value.cmp(&b.value));
+        for tag in tags {
+            println!("{}", tag.value);
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

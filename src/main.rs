@@ -123,6 +123,8 @@ enum TagCommands {
         /// Tag name to remove
         name: String,
     },
+    /// List all tags
+    List,
 }
 
 #[derive(Subcommand, Debug)]
@@ -222,6 +224,9 @@ async fn _main(cli: &Cli) -> Result<()> {
             }
             TagCommands::Unassign { name } => {
                 immichctl.tag_unassign(name).await?;
+            }
+            TagCommands::List => {
+                immichctl.tag_list().await?;
             }
         },
         Commands::Albums { command } => match command {
