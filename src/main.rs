@@ -139,6 +139,8 @@ enum AlbumCommands {
         /// Album name to remove
         name: String,
     },
+    /// List all albums
+    List,
 }
 
 #[tokio::main]
@@ -235,6 +237,9 @@ async fn _main(cli: &Cli) -> Result<()> {
             }
             AlbumCommands::Unassign { name } => {
                 immichctl.album_unassign(name).await?;
+            }
+            AlbumCommands::List => {
+                immichctl.album_list().await?;
             }
         },
     }
