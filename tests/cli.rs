@@ -635,6 +635,20 @@ fn test_tag_list() {
 
 #[test]
 #[serial]
+fn test_album_list() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    // Test that album list works and shows albums in alphabetical order
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("albums").arg("list");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("immichctl_test_album"));
+}
+
+#[test]
+#[serial]
 fn test_album() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());

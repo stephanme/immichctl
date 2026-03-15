@@ -173,6 +173,10 @@ Tags can be assigned to the selected assets. The tag must already exist before i
 
 Assets can be assigned/unassigned to albums.
 
+### List albums
+
+`immichctl albums list`
+
 ### Assign assets to album
 
 `immichctl album assign <album name>`

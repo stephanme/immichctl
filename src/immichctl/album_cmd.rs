@@ -1,6 +1,6 @@
 use super::ImmichCtl;
 use super::assets::Assets;
-use super::types::BulkIdsDto;
+use super::types::{AlbumResponseDto, BulkIdsDto};
 use anyhow::{Context, Result, bail};
 use uuid::Uuid;
 
@@ -66,6 +66,20 @@ impl ImmichCtl {
             1 => matching_albums.pop().unwrap(),
             _ => bail!("Album name is not unique: '{}'", name),
         }
+    }
+
+    pub async fn album_list(&self) -> Result<()> {
+        let albums_resp = self
+            .immich()?
+            .get_all_albums(None, None)
+            .await
+            .context("Could not retrieve albums")?;
+        let mut albums: Vec<&AlbumResponseDto> = albums_resp.iter().collect();
+        albums.sort_by(|a, b| a.album_name.cmp(&b.album_name));
+        for album in albums {
+            println!("{}", album.album_name);
+        }
+        Ok(())
     }
 }
 
