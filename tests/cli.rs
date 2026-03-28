@@ -551,7 +551,7 @@ fn test_assets_datatime() {
         "PXL_20251007_101205558.jpg,2025-10-07T15:12:05.558+03:00,2025-10-07T15:12:05.558+03:00\n",
     ));
 
-    // timezone +00:00 - BROKEN
+    // timezone +00:00
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("assets")
         .arg("datetime")
@@ -566,12 +566,8 @@ fn test_assets_datatime() {
     ));
     wait_for_running_jobs(homedir.path());
     refreshcmd.assert().success();
-    // Bug in immich server 2.5.5: timezone is set to original timezone of +02:00 instead of +00:00 (seems that TZ is derived from other timestamps)
-    // might be related: https://github.com/immich-app/immich/pull/25889
-    // Expected:
-    //  "PXL_20251007_101205558.jpg,2025-10-07T12:12:05.558+00:00,2025-10-07T12:12:05.558+00:00\n",
     listcmd.assert().append_context("cmd", "--timezone +00:00").append_context("refresh", "after").success().stdout(predicate::str::contains(
-        "PXL_20251007_101205558.jpg,2025-10-07T14:12:05.558+02:00,2025-10-07T14:12:05.558+02:00\n",
+        "PXL_20251007_101205558.jpg,2025-10-07T12:12:05.558+00:00,2025-10-07T12:12:05.558+00:00\n",
     ));
 
     // reset datetime of ASSET_UUID
