@@ -1,7 +1,8 @@
 ---
 name: update-immich-api
 description: This skill should be used when the user asks to "update the immich API spec", "update immich-openapi-specs.json", "fetch the latest immich OpenAPI spec", "update the API", or "sync the immich spec".
-argument-hint: [version]
+disable-model-invocation: true
+argument-hint: "[version]"
 allowed-tools: [Bash, Read, Write, WebFetch, WebSearch]
 ---
 
