@@ -1,6 +1,6 @@
 use openapiv3::ReferenceOr;
 use std::collections::HashMap;
-use vergen_git2::{BuildBuilder, Emitter, Git2Builder};
+use vergen_git2::{Build, Emitter, Git2};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Method {
@@ -15,8 +15,8 @@ enum Method {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let build = BuildBuilder::all_build()?;
-    let git2 = Git2Builder::all_git()?;
+    let build = Build::all_build();
+    let git2 = Git2::all_git();
     Emitter::default()
         .add_instructions(&build)?
         .add_instructions(&git2)?
