@@ -3,6 +3,7 @@ mod asset_cmd;
 mod assets;
 mod config;
 mod curl_cmd;
+mod download_cmd;
 mod server_cmd;
 mod tag_cmd;
 

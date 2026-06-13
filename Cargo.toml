@@ -21,6 +21,8 @@ regex = "1.12.2"
 env_logger = "0.11"
 log = "0.4"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+bytes = "1"
 
 [build-dependencies]
 prettyplease = "0.2.22"
