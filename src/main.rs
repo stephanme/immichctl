@@ -5,6 +5,7 @@ use anyhow::{Result, bail};
 use chrono::{FixedOffset, TimeDelta};
 use clap::{Parser, Subcommand};
 use immichctl::{AssetColumns, AssetSearchArgs, CurlMethod, ImmichCtl};
+use std::path::PathBuf;
 use timedelta::TimeDeltaValue;
 
 /// A command line interface for Immich.
@@ -97,6 +98,12 @@ enum AssetCommands {
         timezone: Option<FixedOffset>,
         #[arg(long)]
         dry_run: bool,
+    },
+    /// Download selected assets into a local directory
+    Download {
+        /// Output directory (created if missing)
+        #[arg(long, default_value = ".")]
+        dir: PathBuf,
     },
 }
 
@@ -218,6 +225,9 @@ async fn _main(cli: &Cli) -> Result<()> {
                 immichctl
                     .assets_datetime_adjust(&o, timezone, *dry_run)
                     .await?;
+            }
+            AssetCommands::Download { dir } => {
+                immichctl.assets_download(dir).await?;
             }
         },
         Commands::Tags { command } => match command {

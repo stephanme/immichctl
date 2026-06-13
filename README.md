@@ -2,12 +2,13 @@
 
 immichctl is a command line tool to manage [Immich](https://docs.immich.app) assets and implement missing UI functions.
 
-immichctl doesn't handle upload and download of assets as there are command line tools like [immich-go](https://github.com/simulot/immich-go) that implement this perfectly.
+immichctl doesn't handle upload of assets as there are command line tools like [immich-go](https://github.com/simulot/immich-go) that implement this perfectly.
 
 Main use cases:
 - fix timestamps and time zone of assets (e.g. because camera time was not correct)
 - check/fix missing tags after image upload caused by [immich-go #990](https://github.com/simulot/immich-go/issues/990) / [immich #16747](https://github.com/immich-app/immich/issues/16747)
 - rename/re-assign tags
+- download images based on selection
 
 Example session that adjusts the timezone of all images tagged by 'myvacation':
 ```
@@ -150,6 +151,16 @@ Set timezone (e.g. to +02:00):<br/>
 
 Adjust timestamp by an offset (e.g. -1d2h30m):<br/>
 `immichctl assets datatime --offset <offset>`
+
+### Download selected assets
+
+Downloads all selected assets to a local directory. Files are named according to the immich storage template, i.e. the last path component of each asset's `originalPath` (the camera-side `originalFileName` is **not** used). On filename collision a numeric suffix is appended (e.g. `IMG.jpg`, `IMG (1).jpg`).
+
+`immichctl assets download [--dir <path>]`
+
+- `--dir <path>`: target directory; created if missing. Defaults to `.`.
+
+Internally uses `POST /download/info` to obtain archive groupings and `POST /download/archive` to fetch each ZIP, which is then extracted in memory.
 
 ## Tag Commands
 

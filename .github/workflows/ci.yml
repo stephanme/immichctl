@@ -27,7 +27,7 @@ jobs:
     - name: Build
       run: |
         cargo fmt -- --check
-        cargo clippy
+        cargo clippy --all-targets
         cargo build
     
     - name: Test

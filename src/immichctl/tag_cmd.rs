@@ -100,7 +100,7 @@ pub mod tests {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
             .unwrap()
             .with_timezone(&chrono::Utc);
-        let name = value.split('/').last().unwrap_or(value);
+        let name = value.split('/').next_back().unwrap_or(value);
         TagResponseDto {
             id: id.to_string(),
             name: name.to_string(),

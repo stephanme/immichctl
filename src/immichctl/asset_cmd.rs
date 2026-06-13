@@ -544,6 +544,22 @@ pub mod tests {
         asset
     }
 
+    /// Build a minimal asset with the given id, original camera file name
+    /// (`originalFileName`) and server storage path (`originalPath`).
+    /// Reused by `download_cmd` tests.
+    pub fn create_asset_for_download(
+        id: Uuid,
+        original_file_name: &str,
+        original_path: &str,
+    ) -> AssetResponseDto {
+        let ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let mut asset = create_asset_with_timestamps(ts, ts);
+        asset.id = id.to_string();
+        asset.original_file_name = original_file_name.to_string();
+        asset.original_path = original_path.to_string();
+        asset
+    }
+
     #[tokio::test]
     async fn test_assets_refresh_retrieval_error_includes_id() {
         let (mut ctl, mut server) = create_immichctl_with_server().await;

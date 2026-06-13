@@ -685,6 +685,46 @@ fn test_album() {
 
 #[test]
 #[serial]
+fn test_assets_download() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("clear");
+    cmd.assert().success();
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("search").arg("--id").arg(ASSET_UUID);
+    cmd.assert().success();
+
+    // Download into a temporary directory and assert that exactly one
+    // file was written. The local filename is derived from the basename
+    // of `originalPath` (Immich storage template), which can differ from
+    // the camera-side `originalFileName`, so we don't hard-code it here.
+    let outdir = tempfile::tempdir().unwrap();
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets")
+        .arg("download")
+        .arg("--dir")
+        .arg(outdir.path());
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Downloaded 1 asset(s)"));
+
+    let entries: Vec<_> = std::fs::read_dir(outdir.path())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .collect();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].file_name(), "20251007-121205.jpg");
+
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("assets").arg("clear");
+    cmd.assert().success();
+}
+
+#[test]
+#[serial]
 fn test_curl() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());

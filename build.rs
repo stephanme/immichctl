@@ -42,6 +42,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("/tags/{id}/assets", vec![Method::Put, Method::Delete]),
         ("/albums", vec![Method::Get]),
         ("/albums/{id}/assets", vec![Method::Put, Method::Delete]),
+        ("/download/info", vec![Method::Post]),
+        ("/download/archive", vec![Method::Post]),
     ]);
 
     // Retain only paths that have at least one allowed operation.
