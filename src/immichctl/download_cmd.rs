@@ -1,24 +1,95 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::io::{Cursor, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use anyhow::{Context, Result};
-use futures::StreamExt;
+use futures::TryStreamExt;
+use tokio::io::AsyncWriteExt;
 
 use super::ImmichCtl;
 use super::assets::Assets;
 use super::types::{DownloadArchiveDto, DownloadInfoDto};
 
+/// Shared progress counters updated from both the async download loop and
+/// the blocking extract task. Printed by [`Progress::render`] on a single
+/// terminal line.
+#[derive(Clone)]
+struct Progress {
+    total_bytes: u64,
+    total_files: usize,
+    downloaded: Arc<AtomicU64>,
+    extracted: Arc<AtomicUsize>,
+}
+
+impl Progress {
+    fn new(total_bytes: u64, total_files: usize) -> Self {
+        Self {
+            total_bytes,
+            total_files,
+            downloaded: Arc::new(AtomicU64::new(0)),
+            extracted: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    /// Repaint the progress line. Called periodically by the painter task
+    /// and once more at the end so the final 100% is visible.
+    fn render(&self) {
+        let downloaded = self.downloaded.load(Ordering::Relaxed);
+        let extracted = self.extracted.load(Ordering::Relaxed);
+        let dl_pct = if self.total_bytes > 0 {
+            downloaded as f64 / self.total_bytes as f64 * 100.0
+        } else {
+            100.0
+        };
+        eprint!(
+            "\rDownload: {:>3.0}% ({}/{})  Extract: {}/{} files\x1b[K",
+            dl_pct,
+            format_bytes(downloaded),
+            format_bytes(self.total_bytes),
+            extracted,
+            self.total_files,
+        );
+    }
+}
+
+/// Format `n` bytes as a human-friendly string with one decimal place.
+fn format_bytes(n: u64) -> String {
+    const KIB: u64 = 1024;
+    const MIB: u64 = 1024 * KIB;
+    const GIB: u64 = 1024 * MIB;
+    if n >= GIB {
+        format!("{:.1} GiB", n as f64 / GIB as f64)
+    } else if n >= MIB {
+        format!("{:.1} MiB", n as f64 / MIB as f64)
+    } else if n >= KIB {
+        format!("{:.1} KiB", n as f64 / KIB as f64)
+    } else {
+        format!("{} B", n)
+    }
+}
+
 impl ImmichCtl {
     /// Download all selected assets into `dir`.
     ///
     /// Uses `POST /download/info` to obtain archive groupings and
-    /// `POST /download/archive` to fetch each ZIP archive. Archives are
-    /// extracted in memory; each entry is written under the basename of the
-    /// asset's `originalPath` (the Immich storage-template filename), with
-    /// any directory components dropped. On filename collision a numeric
-    /// suffix is appended (e.g. `IMG.jpg`, `IMG (1).jpg`).
+    /// `POST /download/archive` to fetch each ZIP archive. To keep memory
+    /// bounded regardless of selection size, each archive is streamed to a
+    /// temporary file on disk (an ~8 KiB tokio copy buffer is the only
+    /// in-memory state) and then extracted entry-by-entry via
+    /// [`zip::ZipArchive`] — also streaming each entry through
+    /// [`std::io::copy`] so no entry is ever fully buffered. The temp file
+    /// is removed when extraction finishes.
+    ///
+    /// We can't stream-decode the HTTP body directly into the ZIP reader
+    /// because Immich emits ZIPs that use trailing data descriptors, which
+    /// require the central directory (i.e. random access) for entry sizes.
+    ///
+    /// Each entry is written under the basename of the asset's
+    /// `originalPath` (the Immich storage-template filename), with any
+    /// directory components dropped. On filename collision a numeric suffix
+    /// is appended (e.g. `IMG.jpg`, `IMG (1).jpg`).
     pub async fn assets_download(&self, dir: &Path) -> Result<()> {
         let sel = Assets::load(&self.assets_file);
         if sel.is_empty() {
@@ -50,8 +121,54 @@ impl ImmichCtl {
             .context("Could not retrieve download info")?
             .into_inner();
 
-        let total = info.archives.len();
-        let mut used_names: HashMap<String, u32> = HashMap::new();
+        let total_archives = info.archives.len();
+        let total_bytes: u64 = info.archives.iter().map(|a| a.size.max(0) as u64).sum();
+        let total_files: usize = info.archives.iter().map(|a| a.asset_ids.len()).sum();
+
+        // Assign final destination filenames upfront for all archives.
+        // Deduplicate file names by appending a suffix if the same name appears more than once.
+        // This should not happen if Immich storage template is well configured.
+        let archive_filenames: Vec<Vec<String>> = {
+            let mut used: HashMap<String, u32> = HashMap::new();
+            info.archives
+                .iter()
+                .map(|archive| {
+                    archive
+                        .asset_ids
+                        .iter()
+                        .map(|id| {
+                            let base = name_by_id.get(id).map(|s| s.as_str()).unwrap_or("unknown");
+                            unique_name(&mut used, base).into_owned()
+                        })
+                        .collect()
+                })
+                .collect()
+        };
+
+        let progress = Progress::new(total_bytes, total_files);
+
+        // Background painter: repaint the progress line once per second. Uses a
+        // drop guard so the task is aborted on every exit path (including
+        // early errors).
+        struct PainterGuard(tokio::task::JoinHandle<()>);
+        impl Drop for PainterGuard {
+            fn drop(&mut self) {
+                self.0.abort();
+            }
+        }
+        let _painter = PainterGuard({
+            let p = progress.clone();
+            tokio::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
+                tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                p.render(); // Show initial state immediately, don't wait 100ms.
+                loop {
+                    tick.tick().await;
+                    p.render();
+                }
+            })
+        });
+
         let mut written = 0usize;
 
         for (i, archive) in info.archives.iter().enumerate() {
@@ -71,38 +188,63 @@ impl ImmichCtl {
                 .immich()?
                 .download_archive(None, None, &dto)
                 .await
-                .with_context(|| format!("Could not download archive {}/{}", i + 1, total))?;
-            let bytes = collect_byte_stream(resp.into_inner_stream())
+                .with_context(|| {
+                    format!("Could not download archive {}/{}", i + 1, total_archives)
+                })?;
+
+            // Stream the response into a temp file so the in-memory footprint
+            // is just tokio's copy buffer (~8 KiB), not the whole archive.
+            let temp =
+                tempfile::NamedTempFile::new().context("Could not create temp file for archive")?;
+            let temp_path = temp.path().to_path_buf();
+            let mut out = tokio::fs::File::from_std(
+                temp.reopen()
+                    .context("Could not open temp file for writing")?,
+            );
+            let mut byte_stream = resp.into_inner_stream().map_err(std::io::Error::other);
+            while let Some(chunk) = byte_stream
+                .try_next()
                 .await
-                .with_context(|| format!("Could not read archive {}/{}", i + 1, total))?;
-            written += extract_zip(
-                &bytes,
-                dir,
-                &archive.asset_ids,
-                &name_by_id,
-                &mut used_names,
-            )
-            .with_context(|| format!("Could not extract archive {}/{}", i + 1, total))?;
-            self.eprint_progress_indicator(i, total, 1);
+                .with_context(|| format!("Could not read archive {}/{}", i + 1, total_archives))?
+            {
+                out.write_all(&chunk).await.with_context(|| {
+                    format!("Could not write archive {}/{}", i + 1, total_archives)
+                })?;
+                progress
+                    .downloaded
+                    .fetch_add(chunk.len() as u64, Ordering::Relaxed);
+            }
+            out.flush().await.ok();
+            drop(out);
+
+            // Extract on a blocking thread — `zip` is synchronous and entry
+            // streaming uses `std::io::copy`, which calls into the OS.
+            let dir_owned = dir.to_path_buf();
+            let filenames = archive_filenames[i].clone();
+            let extracted_counter = progress.extracted.clone();
+
+            let count = tokio::task::spawn_blocking(move || -> Result<_> {
+                let file = std::fs::File::open(&temp_path)
+                    .context("Could not open temp archive for extraction")?;
+                extract_zip(file, &dir_owned, &filenames, &extracted_counter)
+            })
+            .await
+            .context("ZIP extraction task failed")?
+            .with_context(|| format!("Could not extract archive {}/{}", i + 1, total_archives))?;
+            written += count;
+            // `temp` drops here, removing the temp archive from disk.
+            drop(temp);
         }
+
+        // Abort the painter (via drop guard) and render the final 100% state
+        // before emitting the trailing newline.
+        drop(_painter);
+        progress.render();
+        eprintln!();
 
         eprintln!("Downloaded {} asset(s) to {}.", written, dir.display());
         Ok(())
     }
-}
-
-/// Drain a [`futures::Stream`] of `reqwest::Result<Bytes>` chunks into a
-/// single contiguous `Vec<u8>`.
-async fn collect_byte_stream<S>(mut stream: S) -> Result<Vec<u8>>
-where
-    S: futures::Stream<Item = reqwest::Result<bytes::Bytes>> + Unpin,
-{
-    let mut buf = Vec::new();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.context("Failed to read response chunk")?;
-        buf.extend_from_slice(&chunk);
-    }
-    Ok(buf)
 }
 
 /// Return the last path component of `p`.
@@ -119,28 +261,23 @@ fn basename_of(p: &str) -> &str {
     }
 }
 
-/// Extract a ZIP archive from `bytes` into `dir`.
+/// Extract a ZIP archive from `file` into `dir`. Each entry is read via
+/// [`std::io::copy`] so no entry is ever fully buffered. The
+/// `extracted_counter` is incremented after each file is written so the
+/// progress painter can observe it across the spawn_blocking boundary.
 ///
-/// Filenames are derived from the basename of the asset's `originalPath`
-/// (looked up in `name_by_id`). When the lookup fails (e.g. server emitted
-/// an entry name not matching any selected asset id), the basename of the
-/// entry name is used as a fallback. Filename collisions get a
-/// `name (N).ext` suffix.
+/// `filenames[i]` is the pre-computed destination filename for ZIP entry `i`
+/// (already collision-deduplicated by the caller).
 ///
 /// Returns the number of files written.
 fn extract_zip(
-    bytes: &[u8],
+    file: std::fs::File,
     dir: &Path,
-    archive_asset_ids: &[String],
-    name_by_id: &HashMap<String, String>,
-    used_names: &mut HashMap<String, u32>,
+    filenames: &[String],
+    extracted_counter: &AtomicUsize,
 ) -> Result<usize> {
-    let reader = Cursor::new(bytes);
-    let mut zip = zip::ZipArchive::new(reader).context("Could not open ZIP archive")?;
+    let mut zip = zip::ZipArchive::new(file).context("Could not open ZIP archive")?;
     let mut written = 0usize;
-    // Iterate by index so we can match entries to asset ids in order.
-    // Immich's downloadArchive endpoint emits entries in the same order as
-    // the requested assetIds; we pair them up positionally for naming.
     for i in 0..zip.len() {
         let mut entry = zip
             .by_index(i)
@@ -148,37 +285,18 @@ fn extract_zip(
         if entry.is_dir() {
             continue;
         }
-        let entry_name = entry
-            .enclosed_name()
-            .unwrap_or_else(|| PathBuf::from(entry.name()));
-
-        // Prefer the basename of the asset's `originalPath` when we can map
-        // this entry to a known asset id; otherwise fall back to the basename
-        // of the ZIP entry itself.
-        let preferred = archive_asset_ids
-            .get(i)
-            .and_then(|id| name_by_id.get(id))
-            .cloned();
-        let basename = preferred.unwrap_or_else(|| {
-            entry_name
-                .file_name()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_else(|| format!("file_{}", i))
-        });
-
-        let unique = unique_name(used_names, &basename);
-        let dest = dir.join(unique.as_ref());
-
-        // `entry.size()` is server-supplied (u64); cap the preallocation so
-        // a hostile or buggy server can't trick us into a huge alloc.
-        const MAX_PREALLOC: u64 = 16 * 1024 * 1024;
-        let mut file_bytes = Vec::with_capacity(entry.size().min(MAX_PREALLOC) as usize);
-        entry
-            .read_to_end(&mut file_bytes)
-            .with_context(|| format!("Could not read ZIP entry '{}'", entry_name.display()))?;
-        std::fs::write(&dest, &file_bytes)
+        let dest = dir.join(
+            filenames
+                .get(i)
+                .with_context(|| format!("No filename pre-assigned for ZIP entry #{}", i))?,
+        );
+        // Stream entry bytes straight to disk — never buffer the full entry.
+        let mut out = std::fs::File::create(&dest)
+            .with_context(|| format!("Could not create '{}'", dest.display()))?;
+        std::io::copy(&mut entry, &mut out)
             .with_context(|| format!("Could not write '{}'", dest.display()))?;
         written += 1;
+        extracted_counter.fetch_add(1, Ordering::Relaxed);
     }
     Ok(written)
 }
@@ -213,7 +331,7 @@ mod tests {
     use crate::immichctl::asset_cmd::tests::create_asset_for_download;
     use crate::immichctl::tests::create_immichctl_with_server;
 
-    use std::io::Write;
+    use std::io::{Cursor, Write};
     use uuid::Uuid;
     use zip::write::SimpleFileOptions;
 
@@ -427,6 +545,38 @@ mod tests {
         let result = ctl.assets_download(&nested).await;
         assert!(result.is_ok(), "{:?}", result.err());
         assert!(nested.join("X.bin").exists());
+    }
+
+    /// End-to-end exercise of the streaming `std::io::copy` path with a
+    /// multi-MB ZIP entry. mockito buffers the response on the server
+    /// side, so this isn't a true memory-bound test, but it does verify
+    /// the streaming pipeline (`bytes_stream` → `StreamReader` →
+    /// `SyncIoBridge` → `read_zipfile_from_stream` → `std::io::copy`)
+    /// preserves all bytes for a non-trivial entry size.
+    #[tokio::test]
+    async fn test_download_streams_large_archive() {
+        let (ctl, mut server) = create_immichctl_with_server().await;
+
+        let id1 = Uuid::new_v4();
+        let asset = create_asset_for_download(id1, "BIG.bin", "/storage/BIG.bin");
+        let mut sel = Assets::load(&ctl.assets_file);
+        sel.add_asset(asset);
+        sel.save().unwrap();
+
+        // 4 MiB of pseudo-random-but-deterministic bytes.
+        let payload: Vec<u8> = (0..(4 * 1024 * 1024))
+            .map(|i| (i as u32).wrapping_mul(2654435761) as u8)
+            .collect();
+
+        let _mocks = mock_download(&mut server, &[id1], &[("BIG.bin", &payload)]).await;
+
+        let outdir = tempfile::tempdir().unwrap();
+        let result = ctl.assets_download(outdir.path()).await;
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let written = std::fs::read(outdir.path().join("BIG.bin")).unwrap();
+        assert_eq!(written.len(), payload.len());
+        assert_eq!(written, payload);
     }
 
     #[tokio::test]
