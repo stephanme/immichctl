@@ -160,7 +160,7 @@ Downloads all selected assets to a local directory. Files are named according to
 
 - `--dir <path>`: target directory; created if missing. Defaults to `.`.
 
-Internally uses `POST /download/info` to obtain archive groupings and `POST /download/archive` to fetch each ZIP, which is then extracted in memory.
+Internally uses `POST /download/info` to obtain archive groupings and `POST /download/archive` to fetch each ZIP.
 
 ## Tag Commands
 
