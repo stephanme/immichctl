@@ -14,7 +14,7 @@ pub struct Assets {
     #[serde(skip)]
     file: PathBuf,
 
-    assets: HashMap<String, AssetResponseDto>,
+    assets: HashMap<Uuid, AssetResponseDto>,
 }
 
 impl Assets {
@@ -57,15 +57,15 @@ impl Assets {
     }
 
     #[allow(dead_code)]
-    pub fn contains(&self, asset_id: &str) -> bool {
+    pub fn contains(&self, asset_id: &Uuid) -> bool {
         self.assets.contains_key(asset_id)
     }
 
     pub fn add_asset(&mut self, asset: AssetResponseDto) {
-        self.assets.insert(asset.id.clone(), asset);
+        self.assets.insert(asset.id, asset);
     }
 
-    pub fn remove_asset(&mut self, asset_id: &str) {
+    pub fn remove_asset(&mut self, asset_id: &Uuid) {
         self.assets.remove(asset_id);
     }
 
@@ -85,10 +85,7 @@ impl Assets {
     }
 
     pub fn asset_uuids(&self) -> Vec<Uuid> {
-        self.assets
-            .keys()
-            .filter_map(|id| Uuid::parse_str(id).ok())
-            .collect()
+        self.assets.keys().copied().collect()
     }
 
     pub fn len(&self) -> usize {
@@ -111,12 +108,10 @@ mod tests {
         // Fill all required fields of AssetResponseDto based on the openapi schema.
         AssetResponseDto {
             // required
-            id: String::from("5460dc82-2353-47d1-878c-2f15a1084001"),
+            id: Uuid::parse_str("5460dc82-2353-47d1-878c-2f15a1084001").unwrap(),
             checksum: String::new(),
             created_at: DateTime::<Utc>::from_timestamp_nanos(0),
-            device_asset_id: String::from("device_asset_id"),
-            device_id: String::from("device_id"),
-            duration: String::from("0"),
+            duration: None,
             file_created_at: DateTime::<Utc>::from_timestamp_nanos(0),
             file_modified_at: DateTime::<Utc>::from_timestamp_nanos(0),
             has_metadata: false,
@@ -128,7 +123,7 @@ mod tests {
             local_date_time: DateTime::<Utc>::from_timestamp_nanos(0),
             original_file_name: String::from("file.jpg"),
             original_path: String::from("/tmp/file.jpg"),
-            owner_id: String::from("owner_id"),
+            owner_id: Uuid::parse_str("5460dc82-2353-47d1-878c-2f15a1084002").unwrap(),
             thumbhash: None, // required but can be null
             type_: AssetTypeEnum::Image,
             updated_at: DateTime::<Utc>::from_timestamp_nanos(0),
@@ -145,7 +140,6 @@ mod tests {
             resized: Some(false),
             stack: None,
             tags: vec![],
-            unassigned_faces: vec![],
             height: None,
             width: None,
         }
@@ -247,29 +241,32 @@ mod tests {
 
         let uuids = sel.asset_uuids();
         assert_eq!(uuids.len(), 1);
-        assert_eq!(uuids[0], Uuid::parse_str(&asset_id).unwrap());
+        assert_eq!(uuids[0], asset_id);
     }
 
     #[test]
     fn retain_assets() {
+        let id1 = Uuid::parse_str("d8f91992-7329-4319-a4cb-33025753354a").unwrap();
+        let id2 = Uuid::parse_str("03d424d4-a39c-4180-b697-a333a3772026").unwrap();
+
         let mut sel = Assets {
             file: PathBuf::from("test_selection.json"),
             assets: HashMap::new(),
         };
         let mut asset1 = default_asset();
-        asset1.id = String::from("d8f91992-7329-4319-a4cb-33025753354a");
+        asset1.id = id1;
         let mut asset2 = default_asset();
-        asset2.id = String::from("03d424d4-a39c-4180-b697-a333a3772026");
+        asset2.id = id2;
 
         sel.add_asset(asset1);
         sel.add_asset(asset2);
 
         assert_eq!(sel.len(), 2);
 
-        sel.retain(|v| v.id == "d8f91992-7329-4319-a4cb-33025753354a");
+        sel.retain(|v| v.id == id1);
 
         assert_eq!(sel.len(), 1);
-        assert!(sel.contains("d8f91992-7329-4319-a4cb-33025753354a"));
-        assert!(!sel.contains("03d424d4-a39c-4180-b697-a333a3772026"));
+        assert!(sel.contains(&id1));
+        assert!(!sel.contains(&id2));
     }
 }

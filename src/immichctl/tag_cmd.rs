@@ -70,7 +70,7 @@ impl ImmichCtl {
             .collect();
 
         if matching_tags.len() == 1 {
-            return Uuid::parse_str(&matching_tags[0].id).ok();
+            return Some(matching_tags[0].id);
         }
 
         None
@@ -102,7 +102,7 @@ pub mod tests {
             .with_timezone(&chrono::Utc);
         let name = value.split('/').next_back().unwrap_or(value);
         TagResponseDto {
-            id: id.to_string(),
+            id: Uuid::parse_str(id).unwrap(),
             name: name.to_string(),
             value: value.to_string(),
             parent_id: parent_id.map(|s| s.to_string()),

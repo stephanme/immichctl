@@ -16,10 +16,9 @@ impl ImmichCtl {
         let dto = BulkIdsDto {
             ids: sel.asset_uuids(),
         };
-        // TODO: find out meaning of key and slug parameters
         let resp = self
             .immich()?
-            .add_assets_to_album(&album_id, None, None, &dto)
+            .add_assets_to_album(&album_id, &dto)
             .await
             .context("Could not assign assets to album")?;
         let cnt = resp.iter().filter(|r| r.success).count();
@@ -51,19 +50,14 @@ impl ImmichCtl {
     pub async fn find_album_by_name(&self, name: &str) -> Result<Uuid> {
         let albums_resp = self
             .immich()?
-            .get_all_albums(None, None)
+            .get_all_albums(None, None, None, None, None)
             .await
             .context("Could not retrieve albums")?;
 
-        let mut matching_albums: Vec<Result<Uuid>> = albums_resp
-            .iter()
-            .filter(|a| a.album_name == name)
-            .map(|found_album| Uuid::parse_str(&found_album.id).map_err(anyhow::Error::from))
-            .collect();
-
-        match matching_albums.len() {
-            0 => bail!("Album not found: '{}'", name),
-            1 => matching_albums.pop().unwrap(),
+        let mut it = albums_resp.iter().filter(|a| a.album_name == name);
+        match (it.next(), it.next()) {
+            (None, _) => bail!("Album not found: '{}'", name),
+            (Some(a), None) => Ok(a.id),
             _ => bail!("Album name is not unique: '{}'", name),
         }
     }
@@ -71,7 +65,7 @@ impl ImmichCtl {
     pub async fn album_list(&self) -> Result<()> {
         let albums_resp = self
             .immich()?
-            .get_all_albums(None, None)
+            .get_all_albums(None, None, None, None, None)
             .await
             .context("Could not retrieve albums")?;
         let mut albums: Vec<&AlbumResponseDto> = albums_resp.iter().collect();
@@ -86,7 +80,7 @@ impl ImmichCtl {
 #[cfg(test)]
 pub mod tests {
     use crate::immichctl::tests::create_immichctl_with_server;
-    use crate::immichctl::types::{AlbumResponseDto, UserAvatarColor, UserResponseDto};
+    use crate::immichctl::types::AlbumResponseDto;
     use anyhow::Result;
     use chrono::DateTime;
     use uuid::Uuid;
@@ -96,23 +90,13 @@ pub mod tests {
             .unwrap()
             .with_timezone(&chrono::Utc);
         AlbumResponseDto {
-            id: id.to_string(),
+            id: Uuid::parse_str(id).unwrap(),
             album_name: name.to_string(),
-            owner_id: Uuid::new_v4().to_string(),
             created_at: timestamp,
             updated_at: timestamp,
             asset_count: 1,
             album_thumbnail_asset_id: None,
             shared: false,
-            assets: vec![],
-            owner: UserResponseDto {
-                id: Uuid::new_v4().to_string(),
-                email: "test@test.com".to_string(),
-                name: "Test User".to_string(),
-                avatar_color: UserAvatarColor::Blue,
-                profile_image_path: "".to_string(),
-                profile_changed_at: timestamp,
-            },
             start_date: None,
             end_date: None,
             has_shared_link: false,

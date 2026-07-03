@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -7,6 +6,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use anyhow::{Context, Result};
 use futures::TryStreamExt;
 use tokio::io::AsyncWriteExt;
+use uuid::Uuid;
 
 use super::ImmichCtl;
 use super::assets::Assets;
@@ -105,13 +105,17 @@ impl ImmichCtl {
         // storage template name, e.g. `20260602-105253.jpg`) rather than
         // `originalFileName` (the original camera filename), so that the
         // downloaded files match what Immich has on disk.
-        let name_by_id: HashMap<String, String> = sel
+        let mut asset_ids = Vec::with_capacity(sel.len());
+        let name_by_id: HashMap<Uuid, String> = sel
             .iter_assets()
-            .map(|a| (a.id.clone(), basename_of(&a.original_path).to_string()))
+            .map(|a| {
+                asset_ids.push(a.id);
+                (a.id, basename_of(&a.original_path).to_string())
+            })
             .collect();
 
         let info_dto = DownloadInfoDto {
-            asset_ids: sel.asset_uuids(),
+            asset_ids,
             ..Default::default()
         };
         let info = self
@@ -138,7 +142,7 @@ impl ImmichCtl {
                         .iter()
                         .map(|id| {
                             let base = name_by_id.get(id).map(|s| s.as_str()).unwrap_or("unknown");
-                            unique_name(&mut used, base).into_owned()
+                            unique_name(&mut used, base)
                         })
                         .collect()
                 })
@@ -171,17 +175,9 @@ impl ImmichCtl {
 
         let mut written = 0usize;
 
-        for (i, archive) in info.archives.iter().enumerate() {
-            let asset_ids: Result<Vec<uuid::Uuid>> = archive
-                .asset_ids
-                .iter()
-                .map(|s| {
-                    uuid::Uuid::parse_str(s)
-                        .with_context(|| format!("Invalid asset id '{}' in download info", s))
-                })
-                .collect();
+        for (i, (archive, filenames)) in info.archives.iter().zip(archive_filenames).enumerate() {
             let dto = DownloadArchiveDto {
-                asset_ids: asset_ids?,
+                asset_ids: archive.asset_ids.clone(),
                 edited: Some(true),
             };
             let resp = self
@@ -220,7 +216,6 @@ impl ImmichCtl {
             // Extract on a blocking thread — `zip` is synchronous and entry
             // streaming uses `std::io::copy`, which calls into the OS.
             let dir_owned = dir.to_path_buf();
-            let filenames = archive_filenames[i].clone();
             let extracted_counter = progress.extracted.clone();
 
             let count = tokio::task::spawn_blocking(move || -> Result<_> {
@@ -302,26 +297,22 @@ fn extract_zip(
 }
 
 /// Return a filename that has not yet been used. If `name` was used N times
-/// before, return e.g. `stem (N).ext` and increment the counter. The
-/// no-collision case returns `Cow::Borrowed(name)` to avoid allocating.
-fn unique_name<'a>(used: &mut HashMap<String, u32>, name: &'a str) -> Cow<'a, str> {
-    // Check first to avoid allocating a String key on the common path.
-    if let Some(count) = used.get_mut(name) {
-        let n = *count;
-        *count += 1;
-        let path = Path::new(name);
-        let stem = path
-            .file_stem()
-            .map(|s| s.to_string_lossy())
-            .unwrap_or_default();
-        let result = match path.extension().map(|s| s.to_string_lossy()) {
-            Some(e) if !e.is_empty() => format!("{} ({}).{}", stem, n, e),
-            _ => format!("{} ({})", stem, n),
-        };
-        Cow::Owned(result)
-    } else {
-        used.insert(name.to_string(), 1);
-        Cow::Borrowed(name)
+/// before, return e.g. `stem (N).ext` and increment the counter.
+fn unique_name(used: &mut HashMap<String, u32>, name: &str) -> String {
+    let count = used.entry(name.to_string()).or_insert(0);
+    let n = *count;
+    *count += 1;
+    if n == 0 {
+        return name.to_string();
+    }
+    let path = Path::new(name);
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy())
+        .unwrap_or_default();
+    match path.extension().map(|s| s.to_string_lossy()) {
+        Some(e) => format!("{} ({}).{}", stem, n, e),
+        None => format!("{} ({})", stem, n),
     }
 }
 
