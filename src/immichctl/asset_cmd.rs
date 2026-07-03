@@ -2,10 +2,9 @@ use std::borrow::Cow;
 
 use super::ImmichCtl;
 use super::assets::Assets;
-use super::types::{AssetResponseDto, MetadataSearchDto, UpdateAssetDto};
+use super::types::{AssetResponseDto, AssetVisibility, MetadataSearchDto, UpdateAssetDto};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
-use uuid::Uuid;
 
 #[derive(clap::Args, Debug, Default)]
 pub struct AssetSearchArgs {
@@ -81,11 +80,9 @@ impl ImmichCtl {
             return Ok(());
         }
         for (i, asset) in sel.iter_mut_assets().enumerate() {
-            let uuid = Uuid::parse_str(&asset.id)
-                .with_context(|| format!("Invalid asset id '{}', expected uuid", asset.id))?;
             let asset_res = self
                 .immich()?
-                .get_asset_info(&uuid, None, None)
+                .get_asset_info(&asset.id, None, None)
                 .await
                 .with_context(|| format!("Could not retrieve asset '{}'", asset.id))?;
             *asset = asset_res.into_inner();
@@ -124,7 +121,7 @@ impl ImmichCtl {
 
     fn asset_column(asset: &AssetResponseDto, col: AssetColumns) -> Cow<'_, str> {
         match col {
-            AssetColumns::Id => Cow::Borrowed(&asset.id),
+            AssetColumns::Id => Cow::Owned(asset.id.to_string()),
             AssetColumns::OriginalFileName => Cow::Borrowed(&asset.original_file_name),
             AssetColumns::FileCreatedAt => Cow::Owned(asset.file_created_at.to_rfc3339()),
             AssetColumns::Timezone => Cow::Owned(Self::asset_timezone_offset(asset).to_string()),
@@ -158,26 +155,8 @@ impl ImmichCtl {
 
         let mut sel = Assets::load(&self.assets_file);
         let old_len = sel.len();
-        // TODO map OpenAPI number to i32 (instead of f64)
-        let mut page = 1f64;
-        while page > 0f64 {
-            search_dto.page = Some(page);
-            let mut resp = self
-                .immich()?
-                .search_assets(&search_dto)
-                .await
-                .context("Search failed")?;
-            for asset in resp.assets.items.drain(..) {
-                sel.add_asset(asset);
-            }
-            match &resp.assets.next_page {
-                Some(next_page) => {
-                    page = next_page
-                        .parse::<f64>()
-                        .context("Invalid next_page value")?;
-                }
-                None => page = 0f64,
-            }
+        for asset in self.search_pages(search_dto).await? {
+            sel.add_asset(asset);
         }
         sel.save()?;
         let new_len = sel.len();
@@ -207,7 +186,7 @@ impl ImmichCtl {
             assets.retain(|asset| {
                 let mut retain = false;
                 if let Some(id) = &args.id
-                    && asset.id != *id
+                    && asset.id.to_string() != *id
                 {
                     retain = true;
                 }
@@ -251,31 +230,39 @@ impl ImmichCtl {
 
     async fn assets_search_remove_by_immich_query(
         &mut self,
-        mut search_dto: MetadataSearchDto,
+        search_dto: MetadataSearchDto,
         assets: &mut Assets,
     ) -> Result<()> {
-        // TODO map OpenAPI number to i32 (instead of f64)
-        let mut page = 1f64;
-        while page > 0f64 {
+        for asset in self.search_pages(search_dto).await? {
+            assets.remove_asset(&asset.id);
+        }
+        Ok(())
+    }
+
+    async fn search_pages(
+        &mut self,
+        mut search_dto: MetadataSearchDto,
+    ) -> Result<Vec<super::types::AssetResponseDto>> {
+        let mut results = Vec::new();
+        let mut page = std::num::NonZeroU64::new(1).unwrap();
+        loop {
             search_dto.page = Some(page);
-            let resp = self
+            let mut resp = self
                 .immich()?
                 .search_assets(&search_dto)
                 .await
                 .context("Search failed")?;
-            for asset in resp.assets.items.iter() {
-                assets.remove_asset(&asset.id);
-            }
-            match &resp.assets.next_page {
-                Some(next_page) => {
-                    page = next_page
-                        .parse::<f64>()
-                        .context("Invalid next_page value")?;
-                }
-                None => page = 0f64,
-            }
+            results.append(&mut resp.assets.items);
+            let Some(next_page) = &resp.assets.next_page else {
+                break;
+            };
+            let n = next_page
+                .parse::<u64>()
+                .context("Invalid next_page value")?;
+            page = std::num::NonZeroU64::new(n)
+                .ok_or_else(|| anyhow::anyhow!("Invalid next_page value: 0"))?;
         }
-        Ok(())
+        Ok(results)
     }
 
     async fn build_search_dto(&self, args: &AssetSearchArgs) -> Result<MetadataSearchDto> {
@@ -304,6 +291,8 @@ impl ImmichCtl {
         if search_dto == MetadataSearchDto::default() {
             bail!("Please provide at least one search flag.");
         }
+        // hardcoded extra args
+        search_dto.visibility = Some(AssetVisibility::Timeline);
         Ok(search_dto)
     }
 
@@ -326,13 +315,10 @@ impl ImmichCtl {
                 continue;
             }
 
-            let uuid = Uuid::parse_str(&asset.id)
-                .with_context(|| format!("Invalid asset id '{}', expected uuid", asset.id))?;
-
             let asset_res = self
                 .immich()?
                 .update_asset(
-                    &uuid,
+                    &asset.id,
                     &UpdateAssetDto {
                         date_time_original: Some(new_date_time_original.to_rfc3339()),
                         ..Default::default()
@@ -481,6 +467,7 @@ pub mod tests {
 
     use super::*;
     use chrono::{DateTime, TimeZone, Utc};
+    use uuid::Uuid;
 
     fn create_asset_with_timestamps(
         file_created_at: DateTime<Utc>,
@@ -491,16 +478,14 @@ pub mod tests {
             .with_timezone(&chrono::Utc);
 
         AssetResponseDto {
-            id: Uuid::new_v4().to_string(),
+            id: Uuid::new_v4(),
             original_file_name: "test.jpg".to_string(),
             file_created_at,
             local_date_time,
             checksum: "checksum".to_string(),
             created_at: timestamp,
-            device_asset_id: "device_asset_id".to_string(),
-            device_id: "device_id".to_string(),
             duplicate_id: None,
-            duration: "0:00".to_string(),
+            duration: None,
             exif_info: None,
             file_modified_at: timestamp,
             has_metadata: true,
@@ -513,7 +498,7 @@ pub mod tests {
             original_mime_type: None,
             original_path: "original_path".to_string(),
             owner: None,
-            owner_id: "owner_id".to_string(),
+            owner_id: Uuid::new_v4(),
             people: vec![],
             tags: vec![],
             type_: AssetTypeEnum::Image,
@@ -521,7 +506,6 @@ pub mod tests {
             resized: None,
             stack: None,
             thumbhash: None,
-            unassigned_faces: vec![],
             visibility: AssetVisibility::Timeline,
             height: None,
             width: None,
@@ -554,7 +538,7 @@ pub mod tests {
     ) -> AssetResponseDto {
         let ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
         let mut asset = create_asset_with_timestamps(ts, ts);
-        asset.id = id.to_string();
+        asset.id = id;
         asset.original_file_name = original_file_name.to_string();
         asset.original_path = original_path.to_string();
         asset
@@ -568,8 +552,8 @@ pub mod tests {
         let file_created_at = Utc.with_ymd_and_hms(2024, 1, 1, 10, 0, 0).unwrap();
         let local_date_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
         let mut asset = create_asset_with_timestamps(file_created_at, local_date_time);
-        let asset_id = Uuid::new_v4().to_string();
-        asset.id = asset_id.clone();
+        let asset_id = Uuid::new_v4();
+        asset.id = asset_id;
 
         let mut sel = Assets::load(&ctl.assets_file);
         sel.add_asset(asset);
@@ -633,7 +617,10 @@ pub mod tests {
         let asset = create_asset_with_timestamps(file_created_at, local_date_time);
 
         // Test basic columns
-        assert_eq!(ImmichCtl::asset_column(&asset, AssetColumns::Id), asset.id);
+        assert_eq!(
+            ImmichCtl::asset_column(&asset, AssetColumns::Id),
+            asset.id.to_string()
+        );
         assert_eq!(
             ImmichCtl::asset_column(&asset, AssetColumns::OriginalFileName),
             "test.jpg"
@@ -758,6 +745,7 @@ pub mod tests {
             result.unwrap(),
             MetadataSearchDto {
                 id: Some(Uuid::parse_str("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1").unwrap()),
+                visibility: Some(AssetVisibility::Timeline),
                 ..Default::default()
             }
         );
@@ -804,6 +792,7 @@ pub mod tests {
                 tag_ids: Some(vec!(
                     Uuid::parse_str("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1").unwrap()
                 )),
+                visibility: Some(AssetVisibility::Timeline),
                 ..Default::default()
             }
         );
@@ -849,6 +838,7 @@ pub mod tests {
             result.unwrap(),
             MetadataSearchDto {
                 album_ids: vec!(Uuid::parse_str("a1a7f1a9-7394-49f7-a5a3-e876a7e16ab1").unwrap()),
+                visibility: Some(AssetVisibility::Timeline),
                 ..Default::default()
             }
         );
@@ -1019,7 +1009,7 @@ pub mod tests {
         assets.save().unwrap();
 
         let args = AssetSearchArgs {
-            id: Some(asset_to_remove_id.clone()),
+            id: Some(asset_to_remove_id.to_string()),
             ..Default::default()
         };
 
