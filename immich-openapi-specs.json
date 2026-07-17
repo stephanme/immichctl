@@ -7139,9 +7139,9 @@
             "in": "query",
             "description": "Filter by date",
             "schema": {
-              "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
-              "example": "2024-01-01T00:00:00.000Z",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+              "example": "2024-01-01",
               "type": "string"
             }
           },
@@ -7308,9 +7308,9 @@
             "in": "query",
             "description": "Filter by date",
             "schema": {
-              "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
-              "example": "2024-01-01T00:00:00.000Z",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+              "example": "2024-01-01",
               "type": "string"
             }
           },
@@ -10552,7 +10552,24 @@
       "post": {
         "description": "Search for assets based on various metadata criteria.",
         "operationId": "searchAssets",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "key",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "slug",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -16206,7 +16223,7 @@
   "info": {
     "title": "Immich",
     "description": "Immich API",
-    "version": "3.0.1",
+    "version": "3.0.3",
     "contact": {}
   },
   "tags": [
@@ -19119,6 +19136,17 @@
           }
         },
         "type": "object"
+      },
+      "HlsVideoResolution": {
+        "description": "HLS video resolution",
+        "enum": [
+          480,
+          720,
+          1080,
+          1440,
+          2160
+        ],
+        "type": "integer"
       },
       "ImageFormat": {
         "description": "Image format",
@@ -24503,42 +24531,42 @@
             "type": "number"
           },
           "x1": {
-            "description": "Top-left X coordinate (normalized 0\u20131)",
+            "description": "Top-left X coordinate (normalized 0–1)",
             "format": "double",
             "type": "number"
           },
           "x2": {
-            "description": "Top-right X coordinate (normalized 0\u20131)",
+            "description": "Top-right X coordinate (normalized 0–1)",
             "format": "double",
             "type": "number"
           },
           "x3": {
-            "description": "Bottom-right X coordinate (normalized 0\u20131)",
+            "description": "Bottom-right X coordinate (normalized 0–1)",
             "format": "double",
             "type": "number"
           },
           "x4": {
-            "description": "Bottom-left X coordinate (normalized 0\u20131)",
+            "description": "Bottom-left X coordinate (normalized 0–1)",
             "format": "double",
             "type": "number"
           },
           "y1": {
-            "description": "Top-left Y coordinate (normalized 0\u20131)",
+            "description": "Top-left Y coordinate (normalized 0–1)",
             "format": "double",
             "type": "number"
           },
           "y2": {
-            "description": "Top-right Y coordinate (normalized 0\u20131)",
+            "description": "Top-right Y coordinate (normalized 0–1)",
             "format": "double",
             "type": "number"
           },
           "y3": {
-            "description": "Bottom-right Y coordinate (normalized 0\u20131)",
+            "description": "Bottom-right Y coordinate (normalized 0–1)",
             "format": "double",
             "type": "number"
           },
           "y4": {
-            "description": "Bottom-left Y coordinate (normalized 0\u20131)",
+            "description": "Bottom-left Y coordinate (normalized 0–1)",
             "format": "double",
             "type": "number"
           }
@@ -25754,10 +25782,26 @@
           "enabled": {
             "description": "Enable real-time HLS transcoding (alpha)",
             "type": "boolean"
+          },
+          "resolutions": {
+            "description": "Resolutions to use for real-time HLS transcoding",
+            "items": {
+              "$ref": "#/components/schemas/HlsVideoResolution"
+            },
+            "type": "array"
+          },
+          "videoCodecs": {
+            "description": "Video codecs to use for real-time HLS transcoding",
+            "items": {
+              "$ref": "#/components/schemas/VideoCodec"
+            },
+            "type": "array"
           }
         },
         "required": [
-          "enabled"
+          "enabled",
+          "resolutions",
+          "videoCodecs"
         ],
         "type": "object"
       },
@@ -25890,9 +25934,10 @@
           },
           "percentageLimit": {
             "description": "Percentage limit of the integrity checksum job",
-            "maximum": 9007199254740991,
+            "format": "double",
+            "maximum": 1,
             "minimum": 0,
-            "type": "integer"
+            "type": "number"
           },
           "timeLimit": {
             "description": "How long the integrity checksum job may run for",
@@ -26909,7 +26954,7 @@
             "type": "array"
           },
           "projectionType": {
-            "description": "Array of projection types for 360\u00b0 content (e.g., \"EQUIRECTANGULAR\", \"CUBEFACE\", \"CYLINDRICAL\")",
+            "description": "Array of projection types for 360° content (e.g., \"EQUIRECTANGULAR\", \"CUBEFACE\", \"CYLINDRICAL\")",
             "items": {
               "nullable": true,
               "type": "string"
