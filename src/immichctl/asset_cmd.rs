@@ -249,7 +249,7 @@ impl ImmichCtl {
             search_dto.page = Some(page);
             let mut resp = self
                 .immich()?
-                .search_assets(&search_dto)
+                .search_assets(None, None, &search_dto)
                 .await
                 .context("Search failed")?;
             results.append(&mut resp.assets.items);
