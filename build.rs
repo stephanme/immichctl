@@ -83,7 +83,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tokens = generator
         .generate_tokens(&spec)
         .expect("progenitor token generation failed");
-    let ast = syn::parse2(tokens).expect("failed to parse generated tokens");
+    let content = tokens.to_string();
+    let ast = syn::parse_file(&content).expect("failed to parse generated tokens");
     let content = prettyplease::unparse(&ast);
 
     let mut out_file =
