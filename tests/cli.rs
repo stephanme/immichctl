@@ -16,6 +16,7 @@ use std::{env, path::Path};
     - A tag named "immichctl/tag1" assigned to 2 assets (not modified by tests).
     - A tag named "immichctl/test_tag" with no assets assigned (modified by tests).
     - An empty album named "immichctl_test_album" that is modified by tests.
+    - Tags prefixed with `immichctl/` (test_create_tag, test_parent/child) are created and deleted by test_tag_create_delete.
     - An asset with ASSET_UUID exists on the server.
 
     Tests are supposed to cleanup after running, i.e. all resources on the server are as described above.
@@ -631,6 +632,54 @@ fn test_tag_list() {
 
 #[test]
 #[serial]
+fn test_tag_create_delete() {
+    let homedir = tempfile::tempdir().unwrap();
+    login(homedir.path());
+
+    // Create a new tag
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("tag")
+        .arg("create")
+        .arg("immichctl/test_create_tag");
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Created tag"));
+
+    // Verify the tag appears in the list
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("tags").arg("list");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("immichctl/test_create_tag"));
+
+    // Delete the tag
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("tag")
+        .arg("delete")
+        .arg("immichctl/test_create_tag");
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Deleted tag"));
+
+    // Verify the tag is gone from the list
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("tags").arg("list");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("immichctl/test_create_tag").not());
+
+    // Deleting a non-existent tag should be idempotent (succeed with warning)
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("tag")
+        .arg("delete")
+        .arg("immichctl/test_create_tag");
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("not found"));
+}
+
+#[test]
+#[serial]
 fn test_album_list() {
     let homedir = tempfile::tempdir().unwrap();
     login(homedir.path());
@@ -798,6 +847,13 @@ fn test_cleanup() {
 
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("tag").arg("unassign").arg("immichctl/test_tag");
+    cmd.assert().success();
+
+    // delete test tag created by test_tag_create_delete
+    let mut cmd = new_cmd(homedir.path());
+    cmd.arg("tag")
+        .arg("delete")
+        .arg("immichctl/test_create_tag");
     cmd.assert().success();
 
     // check that immchctl_test_album is not used
