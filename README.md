@@ -166,6 +166,12 @@ Internally uses `POST /download/info` to obtain archive groupings and `POST /dow
 
 Tags can be specified with full hierarchical name (e.g. `parent/child`) or with just the tag name (`child`) if the name is unambiguous.
 
+### Create tag
+
+Creates a new tag. The name may include a hierarchy (e.g. `parent/child`) — the parent tag must already exist. An optional hex color can be specified.
+
+`immichctl tag create <tag name> [--color <hex color>]`
+
 ### List tags
 
 `immichctl tags list`
@@ -176,9 +182,18 @@ Tags can be assigned to the selected assets. The tag must already exist before i
 
 `immichctl tag assign <tag name>`
 
-### Unassing tag from assets
+### Unassign tag from assets
 
 `immichctl tag unassign <tag name>`
+
+### Delete tag
+
+Deletes a tag by its name. Use the full hierarchical name (e.g. `parent/child`) for unambiguous matching.
+
+If the tag does not exist, the command succeeds with a warning (idempotent).
+If the tag name matches multiple tags, the command fails with an error.
+
+`immichctl tag delete <tag name>`
 
 ## Album Commands
 

@@ -120,6 +120,14 @@ enum ListFormat {
 
 #[derive(Subcommand, Debug)]
 enum TagCommands {
+    /// Create a new tag
+    Create {
+        /// Tag name (can be hierarchical, e.g. parent/child)
+        name: String,
+        /// Tag color (hex, e.g. #aabbcc or aabbcc)
+        #[arg(long)]
+        color: Option<String>,
+    },
     /// Assign a tag to selected assets
     Assign {
         /// Tag name to add
@@ -128,6 +136,11 @@ enum TagCommands {
     /// Unassign a tag from selected assets
     Unassign {
         /// Tag name to remove
+        name: String,
+    },
+    /// Delete a tag by name
+    Delete {
+        /// Tag name (full hierarchical name for unambiguous matching)
         name: String,
     },
     /// List all tags
@@ -231,11 +244,17 @@ async fn _main(cli: &Cli) -> Result<()> {
             }
         },
         Commands::Tags { command } => match command {
+            TagCommands::Create { name, color } => {
+                immichctl.tag_create(name, color.as_deref()).await?;
+            }
             TagCommands::Assign { name } => {
                 immichctl.tag_assign(name).await?;
             }
             TagCommands::Unassign { name } => {
                 immichctl.tag_unassign(name).await?;
+            }
+            TagCommands::Delete { name } => {
+                immichctl.tag_delete(name).await?;
             }
             TagCommands::List => {
                 immichctl.tag_list().await?;
