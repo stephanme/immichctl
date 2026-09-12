@@ -1,6 +1,6 @@
 use super::ImmichCtl;
 use super::assets::Assets;
-use super::types::{BulkIdsDto, TagCreateDto, TagCreateDtoColor, TagResponseDto};
+use super::types::{BulkIdsDto, TagCreateDto, TagCreateDtoColor, TagCreateDtoName, TagResponseDto};
 use anyhow::{Context, Result, bail};
 use uuid::Uuid;
 
@@ -32,8 +32,13 @@ impl ImmichCtl {
             })
             .transpose()?;
 
+        let tag_name: TagCreateDtoName = name_part
+            .to_string()
+            .try_into()
+            .with_context(|| format!("Invalid tag name: '{}'", name))?;
+
         let dto = TagCreateDto {
-            name: name_part.to_string(),
+            name: tag_name,
             parent_id,
             color,
         };
