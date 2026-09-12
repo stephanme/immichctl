@@ -28,6 +28,7 @@ src/
     server_cmd.rs    — Server commands: version, login, logout
     curl_cmd.rs      — Raw API request proxy
     download_cmd.rs  — Download logic (uses POST /download/info + /download/archive)
+immich-openapi-specs.json  — Vendored OpenAPI 3.0 spec (Immich API v3.2.0) at repo root
 build.rs             — Filters immich-openapi-specs.json to only allowed endpoints, generates Rust client via progenitor
 ```
 

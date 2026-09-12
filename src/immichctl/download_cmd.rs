@@ -177,6 +177,7 @@ impl ImmichCtl {
 
         for (i, (archive, filenames)) in info.archives.iter().zip(archive_filenames).enumerate() {
             let dto = DownloadArchiveDto {
+                archive_name: None,
                 asset_ids: archive.asset_ids.clone(),
                 edited: Some(true),
             };

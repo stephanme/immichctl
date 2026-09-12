@@ -8,7 +8,7 @@ allowed-tools: [Bash, Read, Write, WebFetch, WebSearch]
 
 # Update Immich API Spec
 
-Fetch the latest released `immich-openapi-specs.json` from the immich GitHub repository, update the local copy, then build and test the project.
+Fetch the latest released `immich-openapi-specs.json` from the immich GitHub repository, update the local copy, then build, test, and format the project.
 
 ## Arguments
 
@@ -38,7 +38,7 @@ https://raw.githubusercontent.com/immich-app/immich/<tag_name>/open-api/immich-o
 
 ### Step 3 — Update the local file
 
-Write the downloaded content to `immich-openapi-specs.json` in the project root (`/Users/D047883/SAPDevelop/git/immichctl/immich-openapi-specs.json`).
+Write the downloaded content to `immich-openapi-specs.json` in the project root (`./immich-openapi-specs.json`).
 
 Before overwriting, note the previous file size or `info.version` field so you can report the old vs new version to the user.
 
@@ -47,24 +47,53 @@ Before overwriting, note the previous file size or `info.version` field so you c
 Run:
 
 ```bash
-cd /Users/D047883/SAPDevelop/git/immichctl && cargo build 2>&1
+cargo build 2>&1
 ```
 
-Report any build errors to the user. If the build fails, restore the previous spec file content and inform the user.
+Report any build errors to the user. If the build fails, fix the problems caused by the updated spec file.
 
 ### Step 5 — Run the tests
 
 Run:
 
 ```bash
-cd /Users/D047883/SAPDevelop/git/immichctl && cargo test 2>&1
+cargo test 2>&1
 ```
 
 Report test results (passed / failed / ignored counts).
+If tests fail, work on fixing the issues caused by the updated spec file.
 
-### Step 6 — Report outcome
+### Step 6 — Format the source code
+
+Run:
+
+```bash
+cargo fmt
+```
+
+Then verify formatting is clean with:
+
+```bash
+cargo fmt -- --check
+```
+
+If `--check` reports issues after formatting, report them to the user. Rebuild (`cargo build`) only if formatting changed any source files.
+
+### Step 7 — Clippy
+
+Run:
+
+```bash
+cargo clippy 2>&1
+```
+
+Report any Clippy warnings or errors to the user. If there are issues, fix them as needed.
+
+### Step 8 — Report outcome
 
 Summarise:
 - Previous spec version → new spec version
 - Build result (success or failure with errors)
 - Test result (counts and any failures)
+- Format result (files reformatted or already clean)
+- Clippy result (warnings and errors)
