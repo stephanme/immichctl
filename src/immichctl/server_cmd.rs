@@ -130,7 +130,7 @@ mod tests {
             .mock("GET", "/api/server/version")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{"major":1,"minor":100,"patch":0,"release":""}"#)
+            .with_body(r#"{"major":1,"minor":100,"patch":0,"prerelease":null}"#)
             .create_async()
             .await;
 
