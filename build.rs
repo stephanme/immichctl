@@ -76,6 +76,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     prune_components_recursive(&mut spec);
 
+    // Workaround for progenitor 0.15: generated pattern validation calls
+    // regress::Regex::new() without the `u` (unicode) flag, so `\p{...}` property
+    // escapes never match and deserialization of e.g. user emails fails.
+    // Drop such patterns from the spec so no broken validator is generated.
+    strip_unicode_patterns(&mut spec);
+
     // Generate Rust client code using progenitor
     let mut settings = progenitor::GenerationSettings::default();
     settings.with_derive("PartialEq");
@@ -102,6 +108,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .expect("failed to write filtered spec");
 
     Ok(())
+}
+
+/// Remove any `pattern` value containing `\p{...}` Unicode property escapes from the spec.
+fn strip_unicode_patterns(spec: &mut openapiv3::OpenAPI) {
+    fn clean(node: &mut serde_json::Value) {
+        match node {
+            serde_json::Value::Object(map) => {
+                if map
+                    .get("pattern")
+                    .and_then(|p| p.as_str())
+                    .is_some_and(|p| p.contains("\\p{") || p.contains("\\P{"))
+                {
+                    map.remove("pattern");
+                }
+                for v in map.values_mut() {
+                    clean(v);
+                }
+            }
+            serde_json::Value::Array(items) => items.iter_mut().for_each(clean),
+            _ => {}
+        }
+    }
+
+    let mut value = serde_json::to_value(&*spec).expect("serialize spec");
+    clean(&mut value);
+    *spec = serde_json::from_value(value).expect("deserialize spec");
 }
 
 /// Recursively mark-and-sweep all OpenAPI components (schemas, parameters, requestBodies, responses, headers)
