@@ -1001,7 +1001,7 @@ pub mod tests {
             Utc.with_ymd_and_hms(2024, 1, 2, 10, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 2, 12, 0, 0).unwrap(),
         );
-        let asset_to_remove_id = asset1.id.clone();
+        let asset_to_remove_id = asset1.id;
 
         let mut assets = Assets::load(&ctl.assets_file);
         assets.add_asset(asset1);
