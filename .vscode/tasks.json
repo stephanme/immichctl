@@ -4,17 +4,12 @@
 		{
 			"label": "cargo test immichctl",
 			"type": "shell",
-			"command": "cargo test"
-		},
-		{
-			"label": "cargo test immichctl",
-			"type": "shell",
-			"command": "cargo test"
-		},
-		{
-			"label": "cargo test immichctl",
-			"type": "shell",
-			"command": "cargo test"
+			"command": "cargo test",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"problemMatcher": []
 		}
 	]
 }
