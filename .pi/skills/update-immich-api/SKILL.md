@@ -2,8 +2,6 @@
 name: update-immich-api
 description: This skill should be used when the user asks to "update the immich API spec", "update immich-openapi-specs.json", "fetch the latest immich OpenAPI spec", "update the API", or "sync the immich spec".
 disable-model-invocation: true
-argument-hint: "[version]"
-allowed-tools: [Bash, Read, Write, WebFetch, WebSearch]
 ---
 
 # Update Immich API Spec
@@ -12,13 +10,13 @@ Fetch the latest released `immich-openapi-specs.json` from the immich GitHub rep
 
 ## Arguments
 
-Optional version tag: $ARGUMENTS
+Arguments given with `/skill:update-immich-api [version]` are appended to these instructions as a user request.
 
 ## Instructions
 
 ### Step 1 — Determine the target version
 
-If the user provided a version argument (e.g. `v1.130.0`), use that tag.
+If the request names a version tag (e.g. `v3.2.4`), use that tag.
 
 Otherwise, find the latest release tag by fetching the GitHub releases API:
 
@@ -84,7 +82,7 @@ If `--check` reports issues after formatting, report them to the user. Rebuild (
 Run:
 
 ```bash
-cargo clippy 2>&1
+cargo clippy --all-targets 2>&1
 ```
 
 Report any Clippy warnings or errors to the user. If there are issues, fix them as needed.
