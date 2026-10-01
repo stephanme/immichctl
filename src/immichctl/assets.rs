@@ -152,7 +152,7 @@ mod tests {
             assets: HashMap::new(),
         };
         let asset = default_asset();
-        let asset_id = asset.id.clone();
+        let asset_id = asset.id;
 
         sel.add_asset(asset);
         assert_eq!(sel.len(), 1);
@@ -236,7 +236,7 @@ mod tests {
             assets: HashMap::new(),
         };
         let asset = default_asset();
-        let asset_id = asset.id.clone();
+        let asset_id = asset.id;
         sel.add_asset(asset);
 
         let uuids = sel.asset_uuids();
