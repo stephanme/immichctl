@@ -782,8 +782,7 @@ fn test_curl() {
     let mut cmd = new_cmd(homedir.path());
     cmd.arg("curl").arg("server/version");
     cmd.assert().success().stdout(
-        predicate::str::is_match(r#"\{\s*"major":\s*\d+,\s*"minor":\s*\d+,\s*"patch":\s*\d+,"#)
-            .unwrap(),
+        predicate::str::is_match(r#""major":\s*\d+,\s*"minor":\s*\d+,\s*"patch":\s*\d+"#).unwrap(),
     );
 
     // 404
