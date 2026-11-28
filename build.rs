@@ -82,14 +82,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Drop such patterns from the spec so no broken validator is generated.
     strip_unicode_patterns(&mut spec);
 
-    // Generate Rust client code using progenitor
+    // Generate Rust client code using progenitor.
+    //
+    // Since progenitor 0.17 the generator is built from the settings *and* the
+    // spec, and generate_sdk() returns a codespace instead of flat tokens.
+    // `with_derive()` is gone: extra traits are requested through the typespace
+    // settings instead. PartialEq is only "desired" by typify's defaults, which
+    // leaves it off several generated DTOs, so request it as a required trait to
+    // keep the old `with_derive("PartialEq")` behaviour (asset_cmd's
+    // build_search_dto compares a MetadataSearchDto with its default).
     let mut settings = progenitor::GenerationSettings::default();
-    settings.with_derive("PartialEq");
-    let mut generator = progenitor::Generator::new(&settings);
-    let tokens = generator
-        .generate_tokens(&spec)
-        .expect("progenitor token generation failed");
-    let content = tokens.to_string();
+    settings.map_typespace_settings(|ts| {
+        ts.with_required_trait(progenitor::typespace::TypespaceTrait::PartialEq)
+    });
+    let generator =
+        progenitor::Generator::build(&settings, &spec).expect("progenitor generator build failed");
+    let content = generator.generate_sdk().into_stream().to_string();
     let ast = syn::parse_file(&content).expect("failed to parse generated tokens");
     let content = prettyplease::unparse(&ast);
 
