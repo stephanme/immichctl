@@ -127,6 +127,18 @@ mod tests {
         (ctl, server)
     }
 
+    /// Older progenitor releases generated pattern validators without the regex
+    /// `u` flag, so every `\p{...}` property escape matched nothing and e.g. the
+    /// e-mail pattern of [`types::UserResponseDtoEmail`] rejected every address.
+    /// The spec's `\p{...}` patterns are kept (see `build.rs`), so the generated
+    /// validators have to accept the values immich actually sends.
+    #[test]
+    fn test_generated_unicode_property_patterns() {
+        assert!(types::UserResponseDtoEmail::try_from("some.user+tag@sub.example.com").is_ok());
+        assert!(types::UserResponseDtoEmail::try_from("ünicödé@example.com").is_ok());
+        assert!(types::UserResponseDtoEmail::try_from("not an email").is_err());
+    }
+
     #[test]
     fn test_get_default_config_dir() {
         let path = ImmichCtl::get_default_config_dir().expect("no home path");
